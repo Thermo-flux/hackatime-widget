@@ -46,6 +46,7 @@
           <span><i class="dot dot--ai"></i>AI <strong id="ai">0m</strong></span>
         </div>
         <div class="legend legend--one" id="legend-unknown" hidden></div>
+        <p class="notice" id="zero-note" hidden>Nothing yet. Time shows up here as your editor reports to Hackatime.</p>
         <div class="langs">
           <div class="langs__head">
             <h2 class="section-title">Top languages</h2>
@@ -55,14 +56,16 @@
         </div>
       </div>
 
-      <form id="stats-key" class="view" hidden>
+      <form id="stats-key" class="view" hidden novalidate>
         <p class="notice" id="key-msg">Connect your Hackatime account to see your stats.</p>
+        <button class="btn" id="get-key" type="button">Get my key &#8599;</button>
         <div class="field">
           <label class="field__label" for="key">API key</label>
-          <input class="field__input" id="key" type="password" autocomplete="off" required />
+          <input class="field__input" id="key" type="password" autocomplete="off" spellcheck="false" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" aria-describedby="key-error" />
+          <p class="field__error" id="key-error" role="alert" hidden>That doesn't look like a Hackatime key</p>
         </div>
         <button class="btn btn--primary" id="save" type="submit">Connect</button>
-        <p class="hint">Your key is on the Hackatime setup page: <strong>hackatime.hackclub.com/my/wakatime_setup</strong>. If Hackatime is already set up in your editor, this widget finds the key by itself.</p>
+        <p class="hint">Already set up Hackatime in your editor? The widget finds your key automatically.</p>
       </form>
 
       <div id="stats-error" class="view" hidden>

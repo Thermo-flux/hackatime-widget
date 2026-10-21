@@ -20,6 +20,7 @@ export const DEFAULT_LINES = {
   offline: ["Can't reach Hackatime.", "Offline. I'll keep trying.", "No signal. I'll retry.", "Network's down. Retrying.", "Waiting for the network."],
   error: ["Can't reach Hackatime...", "Hmm, something's off.", "Connection hiccup.", "No signal. Retrying...", "The server's napping?", "We'll be back."],
   // Reactions (short events)
+  connected: ["Connected!", "You're in!", "Connected. Let's go!"],
   poke: ["Hehe!", "Boop!", "That tickles.", "Hi there!", "You rang?", "*wiggle*", "Oh, hello!", "Poke accepted."],
   pokeMore: ["Whoa, whoa!", "Okay, okay!", "Again?!", "So many pokes!", "Hey, I'm working!", "Easy there!"],
   dizzy: ["Everything's spinning...", "Too... many... pokes.", "Seeing stars!", "Whoa, dizzy...", "Which way is up?", "Need a sec..."],
@@ -46,7 +47,7 @@ const MOOD_EXPRESSION = { idle: "neutral", human: "happy", ai: "happy", session:
 /** Reactions: line kind -> [expression, how long to hold it (ms)]. */
 const REACTIONS = {
   poke: ["happy", 1200], pokeMore: ["surprised", 1400], dizzy: ["dizzy", 2800], love: ["love", 2600],
-  cheer: ["excited", 2500], pomoDone: ["proud", 3200], sessionStart: ["excited", 2200], sessionEnd: ["proud", 2600],
+  cheer: ["excited", 2500], connected: ["excited", 2800], pomoDone: ["proud", 3200], sessionStart: ["excited", 2200], sessionEnd: ["proud", 2600],
   longSession: ["proud", 3200], streak: ["excited", 3000], error: ["grumpy", 2600], loading: ["thinking", 1600],
   chatter: ["happy", 1600], drowsy: ["sleepy", 2000], wake: ["surprised", 1500],
   morning: ["happy", 2600], afternoon: ["happy", 2600], evening: ["wink", 2000], night: ["sleepy", 2600],

@@ -177,6 +177,7 @@ pub fn run() {
     };
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .manage(Timer(Mutex::new(Pomodoro::new(cfg.pomodoro))))
         .manage(Sessions(Mutex::new(store)))
         .manage(Heartbeats(Mutex::new(activity::HeartbeatCache::default())))

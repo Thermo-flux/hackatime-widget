@@ -1,7 +1,10 @@
 import { $, el } from "./lib/dom.js";
 import { ago, clock, short as fmt } from "./lib/format.js";
 import { invoke } from "./lib/tauri.js";
-import { signal } from "./mascot.js";
+import { react, signal } from "./mascot.js";
+
+const KEY_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SETUP_URL = "https://hackatime.hackclub.com/my/wakatime_setup";
 
 // UI states: loading | ok | needs-key | error
 const VIEWS = { ok: "stats-ok", "needs-key": "stats-key", error: "stats-error" };
@@ -38,8 +41,12 @@ function render(s) {
   const human = total > 0 ? 100 - ai : 0;
   const unknown = !known && total > 0; // can't split the bar without the AI figure, so don't claim 100% human
   $("total").textContent = fmt(total);
+  const zero = total <= 0; // nothing to chart: say so once instead of showing empty parts
+  $("zero-note").hidden = !zero;
+  $("stat-bar").hidden = zero;
+  document.querySelector("#stats-ok .langs").hidden = zero;
   $("stat-bar").classList.toggle("stat-bar--unknown", unknown);
-  $("legend-split").hidden = unknown;
+  $("legend-split").hidden = unknown || zero;
   $("legend-unknown").hidden = !unknown;
   $("legend-unknown").textContent = `${fmt(total)} coded · AI share unavailable`;
   $("human").textContent = fmt(s.human_seconds);
@@ -192,16 +199,39 @@ export function init() {
   $("stale-retry").addEventListener("click", retryNow);
   $("retry").addEventListener("click", retryNow);
 
+  const keyError = (on) => {
+    $("key-error").hidden = !on;
+    $("key").setAttribute("aria-invalid", String(on));
+  };
+  $("key").addEventListener("input", () => {
+    const trimmed = $("key").value.trim(); // pasted keys often carry a newline or spaces
+    if (trimmed !== $("key").value) $("key").value = trimmed;
+    keyError(false);
+  });
+  $("get-key").addEventListener("click", () => {
+    invoke("plugin:opener|open_url", { url: SETUP_URL }).catch(() => {
+      $("key-msg").textContent = `Open ${SETUP_URL.replace("https://", "")} in your browser to find your key.`;
+    });
+  });
+
   $("stats-key").addEventListener("submit", async (e) => {
     e.preventDefault();
+    const key = $("key").value.trim();
+    if (!KEY_SHAPE.test(key)) { // rejected here, without calling the server
+      keyError(true);
+      $("key").focus();
+      return;
+    }
     const save = $("save");
     save.disabled = true;
     try {
-      await invoke("set_api_key", { key: $("key").value });
+      await invoke("set_api_key", { key });
       $("key").value = "";
       await refresh();
+      if (!$("stats-ok").hidden) react("connected");
     } catch (err) {
-      $("key-msg").textContent = `Could not save: ${err.message ?? err}`;
+      if (err.code === "invalid_key") keyError(true);
+      else $("key-msg").textContent = `Could not save: ${err.message ?? err}`;
     } finally {
       save.disabled = false;
     }
