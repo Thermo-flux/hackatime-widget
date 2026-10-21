@@ -20,7 +20,7 @@ export const DEFAULT_LINES = {
   offline: ["Can't reach Hackatime.", "Offline. I'll keep trying.", "No signal. I'll retry.", "Network's down. Retrying.", "Waiting for the network."],
   error: ["Can't reach Hackatime...", "Hmm, something's off.", "Connection hiccup.", "No signal. Retrying...", "The server's napping?", "We'll be back."],
   // Reactions (short events)
-  connected: ["Connected!", "You're in!", "Connected. Let's go!"],
+  connected: ["Connected!"],
   poke: ["Hehe!", "Boop!", "That tickles.", "Hi there!", "You rang?", "*wiggle*", "Oh, hello!", "Poke accepted."],
   pokeMore: ["Whoa, whoa!", "Okay, okay!", "Again?!", "So many pokes!", "Hey, I'm working!", "Easy there!"],
   dizzy: ["Everything's spinning...", "Too... many... pokes.", "Seeing stars!", "Whoa, dizzy...", "Which way is up?", "Need a sec..."],

@@ -57,15 +57,15 @@
       </div>
 
       <form id="stats-key" class="view" hidden novalidate>
-        <p class="notice" id="key-msg">Connect your Hackatime account to see your stats.</p>
+        <p class="notice" id="key-msg" role="status">Connect your Hackatime account to see your stats.</p>
         <button class="btn" id="get-key" type="button">Get my key &#8599;</button>
         <div class="field">
           <label class="field__label" for="key">API key</label>
-          <input class="field__input" id="key" type="password" autocomplete="off" spellcheck="false" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" aria-describedby="key-error" />
+          <input class="field__input" id="key" type="password" autocomplete="off" spellcheck="false" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
           <p class="field__error" id="key-error" role="alert" hidden>That doesn't look like a Hackatime key</p>
         </div>
         <button class="btn btn--primary" id="save" type="submit">Connect</button>
-        <p class="hint">Already set up Hackatime in your editor? The widget finds your key automatically.</p>
+        <p class="hint" id="key-hint">Already set up Hackatime in your editor? The widget finds your key automatically.</p>
       </form>
 
       <div id="stats-error" class="view" hidden>

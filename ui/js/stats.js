@@ -201,7 +201,10 @@ export function init() {
 
   const keyError = (on) => {
     $("key-error").hidden = !on;
+    $("key-hint").hidden = on; // the error takes the hint's place, so the form never grows
     $("key").setAttribute("aria-invalid", String(on));
+    if (on) $("key").setAttribute("aria-describedby", "key-error");
+    else $("key").removeAttribute("aria-describedby");
   };
   $("key").addEventListener("input", () => {
     const trimmed = $("key").value.trim(); // pasted keys often carry a newline or spaces
