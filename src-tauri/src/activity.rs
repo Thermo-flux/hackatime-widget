@@ -101,7 +101,14 @@ pub fn mock_heartbeats(from: f64, to: f64) -> Vec<Heartbeat> {
 
 /// Each poll re-fetches this much before the last fetch's end, so a gap that straddles the
 /// boundary (a heartbeat just before it, the next just after) is still measured.
+///
+/// Limitation: a heartbeat that reaches the server more than this long after its own timestamp
+/// (wakatime-cli's offline queue, a machine whose clock runs behind, ingestion lag) is not picked up
+/// by an incremental poll. The periodic full re-fetch (`RESYNC_SECS`) catches it later.
 pub const OVERLAP_SECS: i64 = 150;
+
+/// Every this often the cache is dropped and the whole session is fetched again.
+pub const RESYNC_SECS: i64 = 30 * 60;
 
 /// Heartbeats already downloaded for the running session, so a poll only asks for what's new.
 #[derive(Debug, Default)]
@@ -109,29 +116,49 @@ pub struct HeartbeatCache {
     session_start: i64,
     /// Unix seconds the last successful fetch ran up to; 0 means nothing is cached.
     fetched_until: i64,
+    /// When the cache was last filled from the session's start.
+    last_full: i64,
+    /// Bumped by `clear`, so a poll that was in flight across a clear doesn't write into the new state.
+    generation: u64,
     hbs: Vec<Heartbeat>,
+}
+
+type Identity = (u64, Option<String>, Option<String>, Option<String>);
+
+fn identity(h: &Heartbeat) -> Identity {
+    (h.time.to_bits(), h.category.clone(), h.project.clone(), h.language.clone())
 }
 
 impl HeartbeatCache {
     pub fn clear(&mut self) {
-        *self = Self::default();
+        let generation = self.generation + 1;
+        *self = Self { generation, ..Self::default() };
     }
 
-    /// Where the next fetch for the session starting at `start` should begin. A different session
-    /// than the cached one starts over.
-    fn fetch_from(&mut self, start: i64) -> i64 {
-        if self.session_start != start || self.fetched_until == 0 {
+    /// Prepares a fetch for the session starting at `start` and returns `(from, generation)`: where the
+    /// fetch should begin and which cache generation it belongs to. Starts over (a full fetch) for a
+    /// different session, an empty cache, a clock that went backwards, or when a resync is due.
+    fn begin_fetch(&mut self, start: i64, now: i64) -> (i64, u64) {
+        if self.session_start != start
+            || self.fetched_until == 0
+            || now < self.fetched_until
+            || now - self.last_full >= RESYNC_SECS
+        {
             self.clear();
             self.session_start = start;
-            return start;
+            self.last_full = now;
+            return (start, self.generation);
         }
-        (self.fetched_until - OVERLAP_SECS).max(start)
+        ((self.fetched_until - OVERLAP_SECS).max(start).min(now), self.generation)
     }
 
-    /// Adds a fetched chunk, dropping heartbeats already held (same `time`), and keeps the list sorted.
-    fn merge(&mut self, chunk: Vec<Heartbeat>, until: i64) {
-        let mut seen: std::collections::HashSet<u64> = self.hbs.iter().map(|h| h.time.to_bits()).collect();
-        self.hbs.extend(chunk.into_iter().filter(|h| seen.insert(h.time.to_bits())));
+    /// Adds a chunk fetched from `from`, skipping heartbeats the cache already holds. Only the cached
+    /// entries inside the chunk's window are compared, by full identity, so two different heartbeats
+    /// that share a timestamp both survive. The list stays sorted by time.
+    fn merge(&mut self, chunk: Vec<Heartbeat>, until: i64, from: i64) {
+        let held: std::collections::HashSet<Identity> =
+            self.hbs.iter().filter(|h| h.time >= from as f64).map(identity).collect();
+        self.hbs.extend(chunk.into_iter().filter(|h| !held.contains(&identity(h))));
         self.hbs.sort_by(|a, b| a.time.total_cmp(&b.time));
         self.fetched_until = self.fetched_until.max(until);
     }
@@ -144,10 +171,14 @@ where
     F: FnOnce(i64, i64) -> Fut,
     Fut: Future<Output = Result<Vec<Heartbeat>>>,
 {
-    let from = cache.lock().unwrap().fetch_from(start);
+    let (from, generation) = cache.lock().unwrap().begin_fetch(start, now);
     let chunk = fetch(from, now).await?;
     let mut c = cache.lock().unwrap();
-    c.merge(chunk, now);
+    if c.generation != generation {
+        // The session was stopped or restarted while we were fetching: don't touch the new cache.
+        return Ok(measure(&chunk, start as f64, now as f64));
+    }
+    c.merge(chunk, now, from);
     Ok(measure(&c.hbs, start as f64, now as f64))
 }
 
@@ -269,25 +300,25 @@ mod tests {
     #[test]
     fn merge_drops_duplicates_and_keeps_order() {
         let mut c = HeartbeatCache::default();
-        c.merge(vec![hb(60.0, "Coding"), hb(0.0, "Coding")], 100);
-        c.merge(vec![hb(60.0, "Coding"), hb(120.0, "Coding")], 200);
+        c.merge(vec![hb(60.0, "Coding"), hb(0.0, "Coding")], 100, 0);
+        c.merge(vec![hb(60.0, "Coding"), hb(120.0, "Coding")], 200, 0);
         let times: Vec<f64> = c.hbs.iter().map(|h| h.time).collect();
         assert_eq!(times, vec![0.0, 60.0, 120.0]);
         assert_eq!(c.fetched_until, 200);
-        c.merge(vec![], 150); // never moves backwards
+        c.merge(vec![], 150, 0); // never moves backwards
         assert_eq!(c.fetched_until, 200);
     }
 
     #[test]
     fn the_first_poll_fetches_everything_and_later_ones_only_the_tail() {
         let (cache, log, all) = (Mutex::new(HeartbeatCache::default()), Mutex::new(Vec::new()), four_hours());
-        for now in [600, 630, 14_400] {
+        for now in [600, 630, 1_000] {
             ready(poll(&cache, 0, now, fake(&all, &log))).unwrap();
         }
         let log = log.lock().unwrap();
         assert_eq!(log[0], (0, 600));
         assert_eq!(log[1], (600 - OVERLAP_SECS, 630)); // a small request, with the overlap
-        assert_eq!(log[2], (630 - OVERLAP_SECS, 14_400));
+        assert_eq!(log[2], (630 - OVERLAP_SECS, 1_000));
     }
 
     #[test]
@@ -299,8 +330,10 @@ mod tests {
             last = Some(ready(poll(&cache, 0, now, fake(&all, &log))).unwrap());
         }
         assert_eq!(last.unwrap(), measure(&all, 0.0, 14_400.0));
-        // Every request after the first stays small.
-        assert!(log.lock().unwrap().iter().skip(1).all(|(f, t)| t - f <= OVERLAP_SECS + 30));
+        // Every request is small except the first and the periodic full re-fetches.
+        let log = log.lock().unwrap();
+        let big = log.iter().filter(|(f, t)| t - f > OVERLAP_SECS + 30).count();
+        assert!((1..=14_400 / RESYNC_SECS as usize).contains(&big), "{big} large requests"); // only the resyncs
     }
 
     #[test]
@@ -326,5 +359,52 @@ mod tests {
         let failed = ready(poll(&cache, 1_000, 1_400, |_, _| std::future::ready(Err(crate::error::Error::Status(500)))));
         assert!(failed.is_err());
         assert_eq!(cache.lock().unwrap().fetched_until, before);
+    }
+
+    #[test]
+    fn a_clock_that_goes_backwards_starts_over() {
+        let (cache, log, all) = (Mutex::new(HeartbeatCache::default()), Mutex::new(Vec::new()), four_hours());
+        ready(poll(&cache, 0, 1_000, fake(&all, &log))).unwrap();
+        let live = ready(poll(&cache, 0, 500, fake(&all, &log))).unwrap();
+        assert_eq!(log.lock().unwrap()[1], (0, 500));
+        assert_eq!(live, measure(&all, 0.0, 500.0));
+    }
+
+    #[test]
+    fn heartbeats_sharing_a_timestamp_are_all_kept() {
+        let all = vec![hb(0.0, "Coding"), hb(60.0, "AI Coding"), hb(60.0, "Coding"), hb(120.0, "Coding")];
+        let (cache, log) = (Mutex::new(HeartbeatCache::default()), Mutex::new(Vec::new()));
+        for now in [70, 100, 130] {
+            ready(poll(&cache, 0, now, fake(&all, &log))).unwrap();
+        }
+        assert_eq!(ready(poll(&cache, 0, 140, fake(&all, &log))).unwrap(), measure(&all, 0.0, 140.0));
+        assert_eq!(cache.lock().unwrap().hbs.len(), 4);
+    }
+
+    #[test]
+    fn a_poll_in_flight_across_a_clear_does_not_write_into_the_new_cache() {
+        let (cache, log, all) = (Mutex::new(HeartbeatCache::default()), Mutex::new(Vec::new()), four_hours());
+        ready(poll(&cache, 0, 600, fake(&all, &log))).unwrap();
+        // The fetch itself clears the cache (as a session stop/start would while it is in flight).
+        let _ = ready(poll(&cache, 0, 700, |_, _| {
+            cache.lock().unwrap().clear();
+            std::future::ready(Ok(vec![hb(650.0, "Coding")]))
+        }));
+        let c = cache.lock().unwrap();
+        assert!(c.hbs.is_empty());
+        assert_eq!(c.fetched_until, 0);
+    }
+
+    #[test]
+    fn late_heartbeats_are_picked_up_by_the_periodic_resync() {
+        let (cache, log) = (Mutex::new(HeartbeatCache::default()), Mutex::new(Vec::new()));
+        let mut all = vec![hb(0.0, "Coding"), hb(60.0, "Coding")];
+        ready(poll(&cache, 0, 100, fake(&all, &log))).unwrap();
+        ready(poll(&cache, 0, 1_000, fake(&all, &log))).unwrap();
+        all.push(hb(90.0, "Coding")); // arrives late, with an old timestamp
+        let missed = ready(poll(&cache, 0, 1_100, fake(&all, &log))).unwrap();
+        assert_eq!(missed.active_secs, 60.0);
+        let resynced = ready(poll(&cache, 0, 100 + RESYNC_SECS, fake(&all, &log))).unwrap();
+        assert_eq!(resynced.active_secs, 90.0);
     }
 }
