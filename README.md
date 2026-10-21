@@ -155,7 +155,17 @@ tools/           dev helpers (below)
 - `tools/shape-check.mjs [--native] [theme...]` checks that every theme's silhouette leaves all controls clickable and
   all text inside the card, on every tab, the live session, the API-key/error views and the theme picker. It runs at
   the real 320x436 window size by default; `--native` uses the hidden window's slightly smaller size as a stress test.
+- `tools/preview/` runs the UI in a plain browser with a stubbed Tauri backend, so UI work can be checked on any OS
+  without Tauri or WebView2. `node tools/preview/serve.mjs` serves it (open `http://127.0.0.1:4173/?scenario=zero`);
+  scenarios are defined in `tools/preview/stub.js` (`normal`, `no_key`, `unauthorized`, `offline`, `zero`,
+  `ai_unavailable`, `huge`, `session_live`, `sessions_empty`, `pomo_running`, `pomo_paused`, `pomo_break`, `mock`).
+  `node tools/preview/shots.mjs out/` screenshots every scenario x theme x tab (320x436 @2x) and writes a contact
+  sheet per scenario (`out/sheet-<scenario>.png`); `--scenarios`, `--themes` and `--tabs` narrow it. First run:
+  `cd tools/preview && npm install && npx playwright install chromium`.
 - `env.ps1` (Windows/PowerShell) points Rust, Cargo and temp files at a `D:\dev` folder.
 
 Known limitation: the Windows/GNU toolchain used for local development can't build the `cdylib` crate type
 (DLL export limit), so the library is `rlib` only; mobile targets would need it re-enabled.
+
+## License
+See [LICENSE](LICENSE).
