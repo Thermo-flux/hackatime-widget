@@ -1,4 +1,4 @@
-﻿//! Hackatime client. Endpoints (see hackclub/hackatime `config/routes.rb` and `swagger/v1/swagger.yaml`):
+//! Hackatime client. Endpoints (see hackclub/hackatime `config/routes.rb` and `swagger/v1/swagger.yaml`):
 //!   GET /api/v1/users/my/stats       totals (`total_seconds=true`), AI share (`filter_by_category`), languages/projects (`features`)
 //!   GET /api/v1/my/heartbeats        raw heartbeats in a time window, used for live session stats
 //! Both accept the same API key as a Bearer token that the WakaTime clients use.
