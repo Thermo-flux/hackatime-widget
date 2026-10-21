@@ -18,7 +18,7 @@
     };
   }
 
-  const RANGE_SCALE = { day: 1, week: 4.2, month: 16, all: 60 };
+  const RANGE_SCALE = { today: 1, week: 4.2, month: 16, all: 60 };
   const statsFor = (range) => {
     const k = RANGE_SCALE[range] ?? 1;
     switch (scenario) {
@@ -36,12 +36,12 @@
   const today = new Date();
   const daily = Array.from({ length: 14 }, (_, i) => {
     const d = new Date(today); d.setDate(d.getDate() - (13 - i));
-    return { date: d.toISOString().slice(0, 10), secs: [0, 5400, 3600, 0, 7200, 1800, 0, 4500, 5400, 0, 3600, 2700, 6300, 5400][i] };
+    return { date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, secs: [0, 5400, 3600, 0, 7200, 1800, 0, 4500, 5400, 0, 3600, 2700, 6300, 5400][i] };
   });
   const emptyDaily = daily.map((d) => ({ ...d, secs: 0 }));
   const summary = (empty) => empty
     ? { total_sessions: 0, total_secs: 0, avg_secs: 0, longest_secs: 0, sessions_today: 0, today_secs: 0, week_secs: 0, current_streak: 0, longest_streak: 0, active_days: 0, chart_days: 14, daily: emptyDaily }
-    : { total_sessions: 23, total_secs: 23 * 3000, avg_secs: 3000, longest_secs: 7200, sessions_today: 1, today_secs: 5400, week_secs: 5.5 * H, current_streak: 3, longest_streak: 6, active_days: 9, chart_days: 14, daily };
+    : { total_sessions: 23, total_secs: 23 * 3000, avg_secs: 3000, longest_secs: 7200, sessions_today: 1, today_secs: 5400, week_secs: 27900, current_streak: 4, longest_streak: 6, active_days: 10, chart_days: 14, daily };
 
   const live = {
     start: Math.floor(Date.now() / 1000) - 3725, elapsed_secs: 3725,
@@ -66,7 +66,7 @@
   };
 
   const config = () => ({
-    api_key: scenario === "no_key" || scenario === "unauthorized" ? "" : "stub-key", base_url: "https://hackatime.hackclub.com/api/hackatime/v1",
+    api_key: scenario === "no_key" ? "" : "stub-key", base_url: "https://hackatime.hackclub.com/api/hackatime/v1",
     refresh_secs: 300, mock: scenario === "mock",
     pomodoro: { ...POMO, long_break_every: 4, auto_start: false },
   });
@@ -74,12 +74,12 @@
   const handlers = {
     get_config: config,
     set_config: () => null,
-    set_pomodoro: (a) => ({ ...pomo(), ...a.lengths }),
+    set_pomodoro: (a) => { const p = { ...pomo(), ...a.lengths }; const idle = p.remaining_secs >= p.total_secs; const t = (p.phase === "focus" ? p.focus_min : p.phase === "short_break" ? p.short_break_min : p.long_break_min) * 60; return idle ? { ...p, total_secs: t, remaining_secs: t } : p; },
     quit: () => null,
     get_stats: (a) => {
-      if (scenario === "no_key") return reject("no_key", "No API key");
-      if (scenario === "unauthorized") return reject("unauthorized", "Hackatime rejected the key (HTTP 401)");
-      if (scenario === "offline") return reject("network", "error sending request: connection refused");
+      if (scenario === "no_key") return reject("no_key", "no API key configured");
+      if (scenario === "unauthorized") return reject("unauthorized", "server returned 401");
+      if (scenario === "offline") return reject("network", "could not reach Hackatime: error sending request: connection refused");
       return statsFor(a?.range);
     },
     session_state: sessionView,

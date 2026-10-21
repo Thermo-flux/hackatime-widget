@@ -7,7 +7,7 @@ import { startServer } from "./serve.mjs";
 
 export const SCENARIOS = [
   "normal", "no_key", "unauthorized", "offline", "zero", "ai_unavailable", "huge", "session_live",
-  "sessions_empty", "pomo_running", "pomo_paused", "pomo_break", "mock",
+  "session_live_noactivity", "sessions_empty", "pomo_running", "pomo_paused", "pomo_break", "mock",
 ];
 const TABS = ["stats", "sessions", "pomodoro"];
 
@@ -37,6 +37,7 @@ for (const scenario of scenarios) {
     await page.evaluate((id) => import("/js/themes.js").then((m) => m.apply(id, { remember: false })), theme);
     for (const tab of tabs) {
       await page.click(`#tab-${tab}`);
+      if (tab === "stats" && scenario === "huge") await page.click('[data-range="all"]'); // widest strings: All-time
       await sleep(350);
       const file = `${scenario}__${theme}__${tab}.png`;
       await page.screenshot({ path: `${out}/${file}`, omitBackground: true });
