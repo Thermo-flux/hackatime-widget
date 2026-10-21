@@ -77,6 +77,8 @@
     <section class="view view-sessions" id="panel-sessions" role="tabpanel" aria-labelledby="tab-sessions" hidden>
       <div class="view" id="sess-idle">
         <button class="btn btn--primary btn--block" id="sess-start" type="button" disabled>Start session</button>
+        <p class="notice" id="sess-empty" hidden>Sessions are focused blocks you start and stop. Hackatime keeps tracking everything else.</p>
+        <div id="sess-stats">
         <div class="tiles">
           <div class="tile"><div class="tile__value tabular" id="sum-count">0</div><div class="tile__label">Sessions</div></div>
           <div class="tile"><div class="tile__value tabular" id="sum-total">0m</div><div class="tile__label">Total time</div></div>
@@ -84,12 +86,14 @@
         </div>
         <div class="regular">
           <span><strong id="sum-streak">0</strong> day streak <span class="muted">· best <span id="sum-best">0</span></span></span>
-          <span title="Days with a session in the last 14"><strong id="sum-active">0</strong>/<span id="sum-window">14</span> active</span>
+          <span title="Days with a session in the last 14"><strong id="sum-active">0</strong> of <span id="sum-window">14</span> days</span>
         </div>
         <div class="chart" id="sum-chart" role="img" aria-label="Time per day, last 14 days"></div>
+        <div class="chart-days" id="sum-days" aria-hidden="true"></div>
         <div class="legend legend--rows">
           <span>In sessions today <strong id="sum-today">0m</strong></span>
           <span>In sessions, 7 days <strong id="sum-week">0m</strong></span>
+        </div>
         </div>
       </div>
 
