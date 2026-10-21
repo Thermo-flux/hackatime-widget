@@ -42,7 +42,7 @@ if (state === "ok") {
   await sleep(45_000); // enough heartbeats at 20s spacing; the app polls every 30s, so force a refresh
   await click("#tab-pomodoro"); await click("#tab-sessions"); await sleep(1500);
   log("== live session");
-  log("  elapsed:", await text("#live-elapsed"), "| coding:", await text("#live-coding"), "| focus:", await text("#live-focus"));
+  log("  elapsed:", await text("#live-elapsed"), "| idle:", await text("#live-idle"), "| focus:", await text("#live-focus"));
   log("  human:", await text("#live-human"), "| ai:", await text("#live-ai"), "| note:", await text("#live-note"));
   await shot(`e2e-${scenario}-live`);
   await click("#sess-stop"); await sleep(800);

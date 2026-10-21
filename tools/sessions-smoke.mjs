@@ -37,7 +37,7 @@ await sleep(1500);
 log("  idle hidden:", await ev("document.getElementById('sess-idle').hidden"), "| live visible:", await ev("!document.getElementById('sess-live').hidden"));
 const t1 = await text("#live-elapsed"); await sleep(2200); const t2 = await text("#live-elapsed");
 log("  clock ticking:", t1, "->", t2, t1 !== t2);
-for (const id of ["live-human", "live-ai", "live-coding", "live-focus", "live-today", "live-note"]) log(`  ${id}:`, await text("#" + id));
+for (const id of ["live-human", "live-ai", "live-idle", "live-focus", "live-today", "live-note"]) log(`  ${id}:`, await text("#" + id));
 await shot("s2-live");
 
 log("== switch tabs while running, then return");

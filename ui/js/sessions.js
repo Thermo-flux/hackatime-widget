@@ -65,7 +65,7 @@ function renderLive(a, summary) {
 
   const act = a.activity;
   if (!act) {
-    for (const id of ["live-human", "live-ai", "live-coding", "live-focus"]) $(id).textContent = "–";
+    for (const id of ["live-human", "live-ai", "live-idle", "live-focus"]) $(id).textContent = "–";
     $("live-bar-human").style.width = "0%";
     $("live-bar-ai").style.width = "0%";
     $("live-bar").classList.add("stat-bar--unknown");
@@ -82,7 +82,8 @@ function renderLive(a, summary) {
   const human = act.active_secs > 0 ? 100 - ai : 0;
   $("live-human").textContent = short(act.human_secs);
   $("live-ai").textContent = short(act.ai_secs);
-  $("live-coding").textContent = short(act.active_secs);
+  // Time in the session with no editor activity: elapsed minus active, never negative.
+  $("live-idle").textContent = short(Math.max(0, a.elapsed_secs - act.active_secs));
   $("live-focus").textContent = pct(act.focus_percent);
   $("live-bar-human").style.width = `${human}%`;
   $("live-bar-ai").style.width = `${ai}%`;
