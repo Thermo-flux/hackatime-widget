@@ -107,13 +107,13 @@ Checked against the official [hackclub/hackatime](https://github.com/hackclub/ha
 
 | Used for | Endpoint |
 |---|---|
-| Totals, AI share, languages, projects | `GET /api/v1/users/my/stats` with `start_date`, `end_date`, and `total_seconds=true`, `filter_by_category=ai coding`, or `features=languages,projects` |
+| Totals, AI share, languages, projects | `GET /api/v1/users/my/stats` (ranges Day, 7d, 30d = the last 7 / 30 days including today, and All) with `start_date`, `end_date`, and `total_seconds=true`, `filter_by_category=ai coding`, or `features=languages,projects` |
 | Live session activity | `GET /api/v1/my/heartbeats?start_time=&end_time=` |
 
 Deliberately **not** used: `/api/hackatime/v1/users/current/summaries`. It always returns empty `categories`
 and `languages`, and is capped at 366 days.
 
-**Verification status.** Request shapes and error handling are tested against a local fake that follows the
+**Verification status.** `tools/probe-hackatime.mjs` prints the category names the live API uses (run it with `HACKATIME_KEY=<key>`); it still has to be run against the live service, and `AI_CATEGORY` is unconfirmed until then. Request shapes and error handling are tested against a local fake that follows the
 swagger spec (`tools/fake-hackatime.mjs`). It has **not** yet been run against the live service, so the
 exact `filter_by_category` spelling (`ai coding`) and the heartbeat fields are the first things to confirm
 with a real key. If the AI call fails the widget degrades to "AI –" rather than showing wrong numbers.
@@ -146,6 +146,8 @@ tools/           dev helpers (below)
 ### Developer tools and flags
 - `HACKATIME_WIDGET_MOCK=1` sample data; `HACKATIME_WIDGET_HIDDEN=1` keep the window off-screen for automated runs;
   `HACKATIME_WIDGET_NO_WAKATIME_CFG=1` don't read `.wakatime.cfg`.
+- `tools/probe-hackatime.mjs` lists the category names the live API reports (`HACKATIME_KEY=<key> node tools/probe-hackatime.mjs`).
+- `tools/preview/moods.mjs` checks the mascot's mood and line against the data state (empty, no key, offline).
 - `tools/fake-hackatime.mjs` local fake Hackatime (`PORT`, `KEY`, `FAIL_AI`, `FAIL_ALL`).
 - `tools/smoke.mjs`, `tools/sessions-smoke.mjs`, `tools/e2e.mjs` drive the running window over WebView2's
   debug port (start the app with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`, Windows).

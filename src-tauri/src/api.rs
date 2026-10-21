@@ -9,26 +9,48 @@ use crate::activity::{Heartbeat, HeartbeatsResponse};
 use crate::config::Config;
 use crate::error::{Error, Result};
 use crate::stats::{aggregate, Item, Slice, Stats, SummariesResponse};
-use chrono::{Datelike, Duration, Local, NaiveDate, TimeZone, Utc};
+use chrono::{Duration, Local, NaiveDate, TimeZone, Utc};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
+use std::sync::OnceLock;
 
 /// The category Hackatime assigns to AI-assisted coding.
 const AI_CATEGORY: &str = "ai coding";
 
+/// Total time allowed for one request, and for connecting. A stalled connection fails instead of hanging the UI.
+const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+const CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
+
+fn build_client(timeout: std::time::Duration, connect_timeout: std::time::Duration) -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(timeout)
+        .connect_timeout(connect_timeout)
+        .user_agent(concat!("hackatime-widget/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .expect("HTTP client config is valid")
+}
+
+/// One client for the whole app, so connections are reused.
+fn client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(|| build_client(REQUEST_TIMEOUT, CONNECT_TIMEOUT))
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Range {
     Today,
-    Week,
-    Month,
+    /// The last 7 days, today included.
+    Last7,
+    /// The last 30 days, today included.
+    Last30,
     AllTime,
 }
 
 impl Range {
     pub fn parse(s: &str) -> Self {
         match s {
-            "week" => Self::Week,
-            "month" => Self::Month,
+            "7d" => Self::Last7,
+            "30d" => Self::Last30,
             "all" => Self::AllTime,
             _ => Self::Today,
         }
@@ -36,11 +58,14 @@ impl Range {
 
     /// First local day of the range; `None` means "from the beginning" (the API defaults to 10 years).
     fn start(self) -> Option<NaiveDate> {
-        let today = Local::now().date_naive();
+        self.start_on(Local::now().date_naive())
+    }
+
+    fn start_on(self, today: NaiveDate) -> Option<NaiveDate> {
         match self {
             Self::Today => Some(today),
-            Self::Week => Some(today - Duration::days(6)),
-            Self::Month => Some(today.with_day(1).unwrap_or(today)),
+            Self::Last7 => Some(today - Duration::days(6)),
+            Self::Last30 => Some(today - Duration::days(29)),
             Self::AllTime => None,
         }
     }
@@ -64,11 +89,11 @@ fn local_midnight_iso(day: NaiveDate) -> String {
         .to_rfc3339()
 }
 
-async fn get_json<T: DeserializeOwned>(cfg: &Config, path: &str, query: &[(&str, String)]) -> Result<T> {
+async fn get_json<T: DeserializeOwned>(http: &reqwest::Client, cfg: &Config, path: &str, query: &[(&str, String)]) -> Result<T> {
     if cfg.api_key.trim().is_empty() {
         return Err(Error::MissingApiKey);
     }
-    let resp = reqwest::Client::new()
+    let resp = http
         .get(format!("{}{}", origin(&cfg.base_url), path))
         .bearer_auth(cfg.api_key.trim())
         .query(query)
@@ -119,6 +144,10 @@ fn mock_stats(range: Range) -> Result<Stats> {
 }
 
 pub async fn fetch_stats(cfg: &Config, range: Range) -> Result<Stats> {
+    fetch_stats_with(client(), cfg, range).await
+}
+
+async fn fetch_stats_with(http: &reqwest::Client, cfg: &Config, range: Range) -> Result<Stats> {
     if cfg.mock {
         return mock_stats(range);
     }
@@ -136,9 +165,9 @@ pub async fn fetch_stats(cfg: &Config, range: Range) -> Result<Stats> {
     const PATH: &str = "/api/v1/users/my/stats";
 
     let (total, ai, detail) = tokio::join!(
-        get_json::<TotalResponse>(cfg, PATH, &total_q),
-        get_json::<TotalResponse>(cfg, PATH, &ai_q),
-        get_json::<StatsEnvelope>(cfg, PATH, &detail_q),
+        get_json::<TotalResponse>(http, cfg, PATH, &total_q),
+        get_json::<TotalResponse>(http, cfg, PATH, &ai_q),
+        get_json::<StatsEnvelope>(http, cfg, PATH, &detail_q),
     );
     let total = total?.total_seconds;
     let detail = detail?.data;
@@ -151,7 +180,7 @@ pub async fn fetch_stats(cfg: &Config, range: Range) -> Result<Stats> {
 pub async fn fetch_heartbeats(cfg: &Config, from: i64, to: i64) -> Result<Vec<Heartbeat>> {
     let iso = |ts: i64| Utc.timestamp_opt(ts, 0).single().unwrap_or_else(Utc::now).to_rfc3339();
     let q = [("start_time", iso(from)), ("end_time", iso(to))];
-    Ok(get_json::<HeartbeatsResponse>(cfg, "/api/v1/my/heartbeats", &q).await?.heartbeats)
+    Ok(get_json::<HeartbeatsResponse>(client(), cfg, "/api/v1/my/heartbeats", &q).await?.heartbeats)
 }
 
 #[cfg(test)]
@@ -212,7 +241,7 @@ mod tests {
 
     #[tokio::test]
     async fn mock_week_totals() {
-        let s = fetch_stats(&cfg("", "", true), Range::Week).await.unwrap();
+        let s = fetch_stats(&cfg("", "", true), Range::Last7).await.unwrap();
         assert_eq!(s.total_seconds, 53_100.0);
         assert_eq!(s.ai_seconds, 18_900.0);
         assert_eq!(s.human_seconds, 34_200.0);
@@ -240,7 +269,7 @@ mod tests {
             ("features=", "200 OK", DETAIL),
         ])
         .await;
-        let s = fetch_stats(&cfg(&url, "k", false), Range::Week).await.unwrap();
+        let s = fetch_stats(&cfg(&url, "k", false), Range::Last7).await.unwrap();
         assert_eq!((s.total_seconds, s.ai_seconds, s.human_seconds), (3600.0, 1200.0, 2400.0));
         assert!((s.ai_percent - 33.333).abs() < 0.01);
         assert!(s.ai_available && !s.mock);
@@ -296,6 +325,44 @@ mod tests {
     async fn unreachable_server_is_a_network_error() {
         let err = fetch_stats(&cfg("http://127.0.0.1:1/api/hackatime/v1", "k", false), Range::Today).await.unwrap_err();
         assert_eq!(err.code(), "network");
+    }
+
+    #[tokio::test]
+    async fn a_server_that_never_replies_times_out_as_a_network_error() {
+        // Accepts connections and then says nothing.
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/api/hackatime/v1", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            let mut held = Vec::new();
+            while let Ok((sock, _)) = listener.accept().await {
+                held.push(sock); // keep it open, never write
+            }
+        });
+        let short = std::time::Duration::from_millis(300);
+        let http = build_client(short, short);
+        let started = std::time::Instant::now();
+        let err = fetch_stats_with(&http, &cfg(&url, "k", false), Range::Today).await.unwrap_err();
+        assert_eq!(err.code(), "network");
+        assert!(started.elapsed() < std::time::Duration::from_secs(5), "took {:?}", started.elapsed());
+    }
+
+    #[test]
+    fn range_starts() {
+        let d = |y, m, day| NaiveDate::from_ymd_opt(y, m, day).unwrap();
+        let today = d(2026, 3, 5);
+        assert_eq!(Range::Today.start_on(today), Some(today));
+        assert_eq!(Range::Last7.start_on(today), Some(d(2026, 2, 27))); // 7 days including today
+        assert_eq!(Range::Last30.start_on(today), Some(d(2026, 2, 4))); // 30 days including today, across a month boundary
+        assert_eq!(Range::AllTime.start_on(today), None);
+    }
+
+    #[test]
+    fn range_keys_parse() {
+        assert!(matches!(Range::parse("7d"), Range::Last7));
+        assert!(matches!(Range::parse("30d"), Range::Last30));
+        assert!(matches!(Range::parse("all"), Range::AllTime));
+        assert!(matches!(Range::parse("today"), Range::Today));
+        assert!(matches!(Range::parse("whatever"), Range::Today));
     }
 
     #[tokio::test]

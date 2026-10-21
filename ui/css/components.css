@@ -106,7 +106,13 @@
 .stat-bar__human { background: var(--human); }
 .stat-bar__ai { background: var(--ai); }
 
-.legend { display: flex; justify-content: space-between; color: var(--muted); font-size: var(--fs-xs); }
+.legend { display: grid; grid-template-columns: 1fr auto; gap: 8px; color: var(--muted); font-size: var(--fs-xs); }
+.legend > span { white-space: nowrap; }
+.legend--one { display: block; }
+.legend--rows { grid-template-columns: 1fr; gap: 2px; } /* long labels: one stat per row, value at the right */
+.legend--rows > span { display: flex; justify-content: space-between; }
+.legend[hidden] { display: none; }
+.stat-bar--unknown { background: color-mix(in srgb, var(--muted) 40%, transparent); }
 .legend strong { color: var(--fg); font-weight: var(--fw-semibold); }
 .dot { display: inline-block; width: 8px; height: 8px; margin-right: var(--space-1); border-radius: 50%; }
 .dot--human { background: var(--human); }
@@ -223,4 +229,5 @@
 
 /* Wide theme fonts: keep labels on one line; values are shrunk to fit by js/fit.js. */
 .tile__label { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile__label--wrap { white-space: normal; line-height: 1.1; text-wrap: balance; }
 .regular { font-size: 13px; flex-wrap: wrap; row-gap: 2px; }

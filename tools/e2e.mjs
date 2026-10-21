@@ -26,7 +26,7 @@ if (state === "ok") {
   log("  total:", await text("#total"), "| human:", await text("#human"), await text("#human-pct") + "%", "| ai:", await text("#ai"), await text("#ai-pct") + "%");
   log("  languages:", await ev("[...document.querySelectorAll('#languages .lang__name')].map(e => e.textContent).join(' | ')"));
   log("  injected <img> elements:", await ev("document.querySelectorAll('#languages img').length"));
-  for (const r of ["week", "all"]) {
+  for (const r of ["7d", "all"]) {
     await click(`[data-range=${r}]`); await sleep(900);
     log(`  range ${r}:`, await text("#total"), "| ai:", await text("#ai"), "| view:", (await visible("#stats-ok")) ? "ok" : "NOT ok");
   }

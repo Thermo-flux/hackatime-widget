@@ -28,21 +28,22 @@
     <section class="view view-stats" id="panel-stats" role="tabpanel" aria-labelledby="tab-stats" aria-busy="true">
       <div class="seg" role="group" aria-label="Time range" id="ranges">
         <button class="seg__btn" data-range="today" aria-pressed="true">Day</button>
-        <button class="seg__btn" data-range="week" aria-pressed="false">Week</button>
-        <button class="seg__btn" data-range="month" aria-pressed="false">Month</button>
+        <button class="seg__btn" data-range="7d" aria-pressed="false">7d</button>
+        <button class="seg__btn" data-range="30d" aria-pressed="false">30d</button>
         <button class="seg__btn" data-range="all" aria-pressed="false">All</button>
       </div>
 
       <div id="stats-ok" class="view" hidden>
-        <div class="total tabular" id="total">0h 0m</div>
+        <div class="total tabular" id="total">0m</div>
         <div class="stat-bar" id="stat-bar" role="img" aria-label="No data">
           <span class="stat-bar__human" id="bar-human"></span>
           <span class="stat-bar__ai" id="bar-ai"></span>
         </div>
-        <div class="legend">
-          <span><i class="dot dot--human"></i>Human <strong id="human">0m</strong> · <span id="human-pct">0%</span></span>
-          <span><i class="dot dot--ai"></i>AI <strong id="ai">0m</strong> · <span id="ai-pct">0%</span></span>
+        <div class="legend" id="legend-split">
+          <span><i class="dot dot--human"></i>Human <strong id="human">0m</strong></span>
+          <span><i class="dot dot--ai"></i>AI <strong id="ai">0m</strong></span>
         </div>
+        <div class="legend legend--one" id="legend-unknown" hidden></div>
         <div class="langs">
           <h2 class="section-title">Top languages</h2>
           <ul id="languages"></ul>
@@ -70,7 +71,7 @@
         <button class="btn btn--primary btn--block" id="sess-start" type="button" disabled>Start session</button>
         <div class="tiles">
           <div class="tile"><div class="tile__value tabular" id="sum-count">0</div><div class="tile__label">Sessions</div></div>
-          <div class="tile"><div class="tile__value tabular" id="sum-total">0h 0m</div><div class="tile__label">Total time</div></div>
+          <div class="tile"><div class="tile__value tabular" id="sum-total">0m</div><div class="tile__label">Total time</div></div>
           <div class="tile"><div class="tile__value tabular" id="sum-avg">0m</div><div class="tile__label">Avg length</div></div>
         </div>
         <div class="regular">
@@ -78,9 +79,9 @@
           <span title="Days with a session in the last 14"><strong id="sum-active">0</strong>/<span id="sum-window">14</span> active</span>
         </div>
         <div class="chart" id="sum-chart" role="img" aria-label="Time per day, last 14 days"></div>
-        <div class="legend">
-          <span>Today <strong id="sum-today">0m</strong></span>
-          <span>Last 7 days <strong id="sum-week">0h 0m</strong></span>
+        <div class="legend legend--rows">
+          <span>In sessions today <strong id="sum-today">0m</strong></span>
+          <span>In sessions, 7 days <strong id="sum-week">0m</strong></span>
         </div>
       </div>
 
@@ -98,7 +99,7 @@
         <div class="tiles">
           <div class="tile"><div class="tile__value tabular" id="live-coding">–</div><div class="tile__label">Coding</div></div>
           <div class="tile"><div class="tile__value tabular" id="live-focus">–</div><div class="tile__label">Focus</div></div>
-          <div class="tile"><div class="tile__value tabular" id="live-today">–</div><div class="tile__label">Today</div></div>
+          <div class="tile"><div class="tile__value tabular" id="live-today">–</div><div class="tile__label tile__label--wrap">Sessions today</div></div>
         </div>
         <p class="notice" id="live-note"></p>
         <button class="btn btn--danger btn--block" id="sess-stop" type="button">End session</button>

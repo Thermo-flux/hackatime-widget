@@ -37,7 +37,7 @@ const text = (sel) => ev(`document.querySelector(${JSON.stringify(sel)})?.textCo
 log("== stats");
 await click("#tab-stats");
 log("total today:", await text("#total"), "| badge:", await ev("!document.getElementById('mock-badge').hidden"));
-for (const r of ["week", "month", "all", "today"]) {
+for (const r of ["7d", "30d", "all", "today"]) {
   const res = await click(`[data-range=${r}]`);
   log(`range ${r}:`, res, await text("#total"), "| pressed:", await ev(`document.querySelector('[data-range=${r}]').getAttribute('aria-pressed')`), "| langs:", await ev("document.querySelectorAll('#languages li').length"));
 }
