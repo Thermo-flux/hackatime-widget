@@ -36,7 +36,8 @@ pub struct Item {
 
 // ---- What the widget UI receives -----------------------------------------
 
-#[derive(Debug, Serialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
 pub struct Stats {
     pub total_seconds: f64,
     pub ai_seconds: f64,
@@ -69,7 +70,7 @@ impl Stats {
     }
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Slice {
     pub name: String,
     pub seconds: f64,

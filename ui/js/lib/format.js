@@ -13,3 +13,15 @@ export function short(secs) {
   const m = Math.floor(Math.max(0, secs) / 60);
   return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
 }
+
+/** "just now", "3m ago", "2h ago" for how long ago something happened. */
+export function ago(secs) {
+  const m = Math.floor(Math.max(0, secs) / 60);
+  return m < 1 ? "just now" : m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h ago`;
+}
+
+/** Local clock time as 24-hour "14:02". */
+export function clock(unixSecs) {
+  const d = new Date(unixSecs * 1000);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}

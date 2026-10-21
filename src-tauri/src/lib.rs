@@ -3,6 +3,7 @@
 
 mod activity;
 mod api;
+mod cache;
 #[cfg(not(test))]
 mod app;
 mod config;

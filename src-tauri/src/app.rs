@@ -6,7 +6,7 @@ use crate::error::Result;
 use crate::pomodoro::{Pomodoro, Snapshot};
 use crate::sessions::{self, SessionStore, Summary};
 use crate::stats::Stats;
-use crate::{activity, api};
+use crate::{activity, api, cache};
 use chrono::{FixedOffset, Local, Utc};
 use serde::Serialize;
 use std::sync::Mutex;
@@ -71,7 +71,31 @@ fn session_stop(store: State<Sessions>) -> Result<bool> {
 
 #[tauri::command]
 async fn get_stats(range: String) -> Result<Stats> {
-    api::fetch_stats(&config::load(), api::Range::parse(&range)).await
+    let cfg = config::load();
+    let stats = api::fetch_stats(&cfg, api::Range::parse(&range)).await?;
+    if !cfg.mock {
+        // The cache is a convenience: failing to write it must not fail the refresh.
+        let _ = cache::store(&config::data_path("stats-cache.json"), &range, &stats, Utc::now().timestamp());
+    }
+    Ok(stats)
+}
+
+#[derive(Serialize)]
+struct CachedStats {
+    fetched_at: i64,
+    stale: bool,
+    stats: Stats,
+}
+
+/// The last good stats for a range, or `None` if there are none (or in demo mode).
+#[tauri::command]
+fn get_cached_stats(range: String) -> Option<CachedStats> {
+    if config::load().mock {
+        return None;
+    }
+    let now = Utc::now().timestamp();
+    let entry = cache::StatsCache::load(&config::data_path("stats-cache.json")).get(&range)?.clone();
+    Some(CachedStats { fetched_at: entry.fetched_at, stale: cache::is_stale(&entry, now), stats: entry.stats })
 }
 
 /// What's saved on disk; a key picked up from `.wakatime.cfg` is used but never copied into it.
@@ -162,6 +186,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_stats,
+            get_cached_stats,
             get_config,
             set_config,
             set_pomodoro,

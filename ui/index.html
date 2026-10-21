@@ -26,6 +26,10 @@
     </header>
 
     <section class="view view-stats" id="panel-stats" role="tabpanel" aria-labelledby="tab-stats" aria-busy="true">
+      <div class="banner" id="stale-banner" role="status" hidden>
+        <span id="stale-text"></span>
+        <button class="link-btn" id="stale-retry" type="button">Retry</button>
+      </div>
       <div class="seg" role="group" aria-label="Time range" id="ranges">
         <button class="seg__btn" data-range="today" aria-pressed="true">Day</button>
         <button class="seg__btn" data-range="7d" aria-pressed="false">7d</button>
@@ -45,7 +49,10 @@
         </div>
         <div class="legend legend--one" id="legend-unknown" hidden></div>
         <div class="langs">
-          <h2 class="section-title">Top languages</h2>
+          <div class="langs__head">
+            <h2 class="section-title">Top languages</h2>
+            <span class="updated" id="updated"></span>
+          </div>
           <ul id="languages"></ul>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import { $, el } from "./lib/dom.js";
-import { short as fmt } from "./lib/format.js";
+import { ago, clock, short as fmt } from "./lib/format.js";
 import { invoke } from "./lib/tauri.js";
 import { signal } from "./mascot.js";
 
@@ -60,25 +60,90 @@ function render(s) {
   signal("empty", total === 0);
 }
 
+const BACKOFF_SECS = [30, 60, 120, 300]; // then the normal interval takes over
+let retryTimer = null;
+let tickTimer = null;
+let failures = 0;
+let shown = null; // { range, fetchedAt } for the data on screen, if any
+
+const nowSecs = () => Math.floor(Date.now() / 1000);
+
+function setStale(on) {
+  $("stats-ok").classList.toggle("is-stale", on);
+  $("stale-banner").hidden = !on || !shown;
+  if (on && shown) {
+    $("stale-text").textContent = `${offlineKind} · showing ${clock(shown.fetchedAt)}`;
+  }
+}
+let offlineKind = "Offline";
+
+function updateAgo() {
+  $("updated").textContent = shown ? `Updated ${ago(nowSecs() - shown.fetchedAt)}` : "";
+}
+
+function showData(stats, fetchedAt, forRange) {
+  render(stats);
+  shown = { range: forRange, fetchedAt };
+  updateAgo();
+  show("ok");
+}
+
+/** Paint the saved copy of `forRange` right away, if there is one. Returns whether it did. */
+async function showCached(forRange) {
+  try {
+    const c = await invoke("get_cached_stats", { range: forRange });
+    if (!c || forRange !== range) return false;
+    showData(c.stats, c.fetched_at, forRange);
+    setStale(false);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function scheduleRetry() {
+  clearTimeout(retryTimer);
+  const delay = BACKOFF_SECS[failures - 1];
+  if (delay) retryTimer = setTimeout(refresh, delay * 1000);
+}
+
 export async function refresh() {
+  clearTimeout(retryTimer);
+  const asked = range;
   $("panel-stats").setAttribute("aria-busy", "true"); // keep old values on screen, dimmed
   try {
-    render(await invoke("get_stats", { range }));
-    show("ok");
+    const stats = await invoke("get_stats", { range: asked });
+    if (asked !== range) return; // the user switched ranges meanwhile; that refresh will paint
+    failures = 0;
+    showData(stats, nowSecs(), asked);
+    setStale(false);
     signal("no_key", false);
     signal("offline", false);
     signal("error", false);
   } catch (e) {
+    if (asked !== range) return;
     const needsKey = e.code === "no_key" || e.code === "unauthorized";
     signal("no_key", needsKey);
     signal("offline", e.code === "network");
     signal("error", e.code === "server");
     if (needsKey) {
+      shown = null;
       signal("empty", false);
       $("key-msg").textContent =
         e.code === "unauthorized" ? "Hackatime rejected that key. Check it and try again." : "Connect your Hackatime account to see your stats.";
       show("needs-key");
+      return;
+    }
+    failures += 1;
+    scheduleRetry();
+    // Keep whatever we have for this range: what's on screen, else the saved copy.
+    const haveData = (shown && shown.range === asked) || (await showCached(asked));
+    if (haveData) {
+      offlineKind = e.code === "network" ? "Offline" : "Can't refresh";
+      show("ok");
+      setStale(true);
     } else {
+      shown = null;
       const detail = e.message ?? String(e);
       $("error-msg").textContent =
         e.code === "network" ? "Can't reach Hackatime. Check your connection and retry." : detail;
@@ -95,8 +160,13 @@ async function schedule() {
 }
 
 /** Stop background refreshing while the window is hidden. */
-export function pause() { clearInterval(timer); timer = null; }
-export function resume() { refresh(); schedule(); }
+export function pause() { clearInterval(timer); clearInterval(tickTimer); clearTimeout(retryTimer); timer = null; }
+export function resume() {
+  showCached(range).then(() => refresh());
+  schedule();
+  clearInterval(tickTimer);
+  tickTimer = setInterval(updateAgo, 30_000);
+}
 
 export function init() {
   $("ranges").addEventListener("click", (e) => {
@@ -104,9 +174,10 @@ export function init() {
     if (!btn) return;
     range = btn.dataset.range;
     document.querySelectorAll("#ranges .seg__btn").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
-    refresh();
+    showCached(range).then(() => refresh());
   });
 
+  $("stale-retry").addEventListener("click", refresh);
   $("retry").addEventListener("click", refresh);
 
   $("stats-key").addEventListener("submit", async (e) => {
