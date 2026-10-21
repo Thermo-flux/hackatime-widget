@@ -29,6 +29,28 @@ const modeOf = (s) => (s.running ? "running" : s.remaining_secs >= s.total_secs 
 /** The configured length differs from the phase in progress (lengths were changed after it started). */
 const pendingLengths = (s) => s[LENGTH_KEY[s.phase]] * 60 !== s.total_secs;
 
+const MAX_DOTS = 8;
+
+/** One dot per focus session in the current long-break cycle, filled as they finish; many sessions collapse to a count. */
+function renderDots(s) {
+  const done = s.completed_focus;
+  const box = $("pomo-dots");
+  if (done > MAX_DOTS) {
+    box.replaceChildren(`●×${done}`);
+    return;
+  }
+  const cycle = Math.min(MAX_DOTS, s.long_break_every > 0 ? s.long_break_every : 4);
+  // During the long break the cycle just completed stays full; after it, the row empties for the next one.
+  const filled = done > 0 && done % cycle === 0 && s.phase === "long_break" ? cycle : done % cycle;
+  box.replaceChildren(
+    ...Array.from({ length: cycle }, (_, i) => {
+      const dot = document.createElement("span");
+      dot.className = i < filled ? "pdot pdot--on" : "pdot";
+      return dot;
+    }),
+  );
+}
+
 function render(s) {
   const prev = state;
   state = s;
@@ -55,10 +77,13 @@ function render(s) {
   bar.style.strokeDasharray = String(CIRCUMFERENCE);
   bar.style.strokeDashoffset = String(CIRCUMFERENCE * (1 - s.remaining_secs / s.total_secs));
 
-  const lengths = `${s.focus_min} / ${s.short_break_min} min`;
-  $("pomo-lengths").textContent = pendingLengths(s) ? `Next: ${lengths}` : lengths;
-  $("pomo-sessions").title = `Focus ${s.focus_min} min, rest ${s.short_break_min} min, long rest ${s.long_break_min} min`;
-  $("pomo-count").textContent = `${s.completed_focus} done`;
+  // The lengths live on the Times button (tooltip, and read out by screen readers); the line under the ring is today's progress.
+  const lengths = `Focus ${s.focus_min} min, rest ${s.short_break_min} min, long rest ${s.long_break_min} min`;
+  const text = pendingLengths(s) ? `${lengths} (from the next phase)` : lengths;
+  $("pomo-lengths").textContent = text;
+  $("pomo-set").title = text;
+  renderDots(s);
+  $("pomo-count").textContent = s.completed_focus > MAX_DOTS ? "today" : `${s.completed_focus} today`; // the dots row already holds the number when it collapses
   document.title = s.running ? `${time} - ${label}` : "Hackatime";
 
   $("pomo-reset").disabled = mode === "idle" && !pendingLengths(s);

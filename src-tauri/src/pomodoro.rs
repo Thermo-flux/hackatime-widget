@@ -1,3 +1,4 @@
+use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
@@ -53,8 +54,10 @@ pub struct Snapshot {
     pub running: bool,
     pub remaining_secs: u64,
     pub total_secs: u64,
-    /// Focus sessions finished since the app started.
+    /// Focus sessions finished today (local time); starts over at midnight.
     pub completed_focus: u32,
+    /// Focus sessions per long break, so the UI can draw the cycle (0: no long breaks).
+    pub long_break_every: u32,
     /// Phase that ended during this call, so the UI can alert once.
     pub finished: Option<Phase>,
     /// The configured lengths in minutes (they apply from the next phase if the current one had started).
@@ -69,6 +72,8 @@ pub struct Pomodoro {
     cfg: PomodoroConfig,
     phase: Phase,
     completed_focus: u32,
+    /// The local day `completed_focus` belongs to.
+    day: NaiveDate,
     remaining: Duration,
     deadline: Option<Instant>,
     /// Length of the current phase, fixed when it began (a settings change doesn't stretch a started phase).
@@ -76,10 +81,25 @@ pub struct Pomodoro {
 }
 
 impl Pomodoro {
-    pub fn new(cfg: PomodoroConfig) -> Self {
+    /// A fresh timer on `day` that already has `completed_focus` sessions behind it.
+    pub fn new(cfg: PomodoroConfig, day: NaiveDate, completed_focus: u32) -> Self {
         let cfg = cfg.clamped();
         let total = Self::length(&cfg, Phase::Focus);
-        Self { cfg, phase: Phase::Focus, completed_focus: 0, remaining: total, deadline: None, total }
+        Self { cfg, phase: Phase::Focus, completed_focus, day, remaining: total, deadline: None, total }
+    }
+
+    pub fn completed_focus(&self) -> u32 {
+        self.completed_focus
+    }
+
+    /// Starts today's count over when the local date has moved on. Returns whether it did.
+    pub fn roll_day(&mut self, today: NaiveDate) -> bool {
+        if today == self.day {
+            return false;
+        }
+        self.day = today;
+        self.completed_focus = 0;
+        true
     }
 
     fn length(cfg: &PomodoroConfig, phase: Phase) -> Duration {
@@ -180,6 +200,7 @@ impl Pomodoro {
             remaining_secs: remaining.as_secs_f64().ceil() as u64,
             total_secs: self.total.as_secs(),
             completed_focus: self.completed_focus,
+            long_break_every: self.cfg.long_break_every,
             finished,
             focus_min: self.cfg.focus_min,
             short_break_min: self.cfg.short_break_min,
@@ -194,8 +215,41 @@ mod tests {
 
     const MIN: Duration = Duration::from_secs(60);
 
+    fn day(d: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(2026, 10, d).unwrap()
+    }
+
+    fn with(cfg: PomodoroConfig) -> Pomodoro {
+        Pomodoro::new(cfg, day(21), 0)
+    }
+
+    #[test]
+    fn a_new_day_resets_the_count_but_not_the_timer() {
+        let (mut p, t0) = (Pomodoro::new(PomodoroConfig::default(), day(21), 3), Instant::now());
+        p.start(t0);
+        assert!(!p.roll_day(day(21)));
+        assert_eq!(p.completed_focus(), 3);
+        assert!(p.roll_day(day(22)));
+        assert_eq!(p.completed_focus(), 0);
+        assert!(p.snapshot(t0 + 10 * MIN).running, "midnight must not stop a running timer");
+        assert!(!p.roll_day(day(22)));
+    }
+
+    #[test]
+    fn a_restored_count_carries_on_counting() {
+        let (mut p, t0) = (Pomodoro::new(PomodoroConfig::default(), day(21), 2), Instant::now());
+        p.start(t0);
+        assert_eq!(p.snapshot(t0 + 25 * MIN).completed_focus, 3);
+    }
+
+    #[test]
+    fn the_snapshot_carries_the_long_break_cadence() {
+        let mut p = with(PomodoroConfig { long_break_every: 3, ..Default::default() });
+        assert_eq!(p.snapshot(Instant::now()).long_break_every, 3);
+    }
+
     fn timer() -> Pomodoro {
-        Pomodoro::new(PomodoroConfig::default())
+        with(PomodoroConfig::default())
     }
 
     #[test]
@@ -256,7 +310,7 @@ mod tests {
 
     #[test]
     fn auto_start_keeps_running_into_the_next_phase() {
-        let mut p = Pomodoro::new(PomodoroConfig { auto_start: true, ..Default::default() });
+        let mut p = with(PomodoroConfig { auto_start: true, ..Default::default() });
         let t0 = Instant::now();
         p.start(t0);
         let s = p.snapshot(t0 + 25 * MIN);
@@ -291,7 +345,7 @@ mod tests {
 
     #[test]
     fn zero_minute_config_is_clamped() {
-        let mut p = Pomodoro::new(PomodoroConfig { focus_min: 0, ..Default::default() });
+        let mut p = with(PomodoroConfig { focus_min: 0, ..Default::default() });
         assert_eq!(p.snapshot(Instant::now()).remaining_secs, 60);
     }
 
@@ -302,7 +356,7 @@ mod tests {
         assert_eq!((c.focus_min, c.short_break_min, c.long_break_min), (1, 60, 1));
         assert_eq!((c.long_break_every, c.auto_start), (LONG_BREAK_EVERY_MAX, true));
         let huge = PomodoroConfig { focus_min: u64::MAX, ..Default::default() };
-        let mut p = Pomodoro::new(huge);
+        let mut p = with(huge);
         assert_eq!(p.snapshot(Instant::now()).remaining_secs, 180 * 60);
         // In-range values pass through untouched.
         let d = PomodoroConfig::default().clamped();
@@ -356,7 +410,7 @@ mod tests {
 
     #[test]
     fn long_break_every_zero_means_never() {
-        let mut p = Pomodoro::new(PomodoroConfig { long_break_every: 0, ..Default::default() });
+        let mut p = with(PomodoroConfig { long_break_every: 0, ..Default::default() });
         let t0 = Instant::now();
         p.start(t0);
         assert_eq!(p.snapshot(t0 + 25 * MIN).phase, Phase::ShortBreak);

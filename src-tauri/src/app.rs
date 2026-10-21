@@ -6,7 +6,7 @@ use crate::error::Result;
 use crate::pomodoro::{Pomodoro, Snapshot};
 use crate::sessions::{self, SessionStore, Summary};
 use crate::stats::Stats;
-use crate::{activity, api, cache};
+use crate::{activity, api, cache, focus_day};
 use chrono::{FixedOffset, Local, Utc};
 use serde::Serialize;
 use std::sync::Mutex;
@@ -14,7 +14,29 @@ use std::time::Instant;
 use tauri::State;
 
 /// Held in Tauri state so the timer keeps running if the UI reloads.
-struct Timer(Mutex<Pomodoro>);
+struct Timer {
+    state: Mutex<Pomodoro>,
+    /// Sample-data mode never writes files, so today's count stays in memory there.
+    persist: bool,
+}
+
+impl Timer {
+    /// Runs `act` on the timer, then returns its snapshot. Rolls the day over first, and saves
+    /// today's count whenever it changed.
+    fn with(&self, act: impl FnOnce(&mut Pomodoro, Instant)) -> Snapshot {
+        let now = Instant::now();
+        let today = Local::now().date_naive();
+        let mut t = self.state.lock().unwrap();
+        let before = (t.completed_focus(), t.roll_day(today));
+        act(&mut t, now);
+        let snap = t.snapshot(now);
+        if self.persist && (snap.completed_focus != before.0 || before.1) {
+            // The count is a convenience: failing to save it must not break the timer.
+            let _ = focus_day::save(&config::data_path("pomodoro-day.json"), today, snap.completed_focus);
+        }
+        snap
+    }
+}
 
 struct Sessions(Mutex<SessionStore>);
 
@@ -123,9 +145,7 @@ fn set_api_key(key: String) -> Result<()> {
 #[tauri::command]
 fn set_pomodoro(timer: State<Timer>, lengths: PomodoroLengths) -> Result<Snapshot> {
     let saved = config::save_lengths(lengths)?;
-    let mut t = timer.0.lock().unwrap();
-    t.set_config(saved);
-    Ok(t.snapshot(Instant::now()))
+    Ok(timer.with(|t, _| t.set_config(saved)))
 }
 
 /// The window is frameless and off the taskbar, so the UI needs its own way to quit.
@@ -136,35 +156,27 @@ fn quit(app: tauri::AppHandle) {
 
 #[tauri::command]
 fn pomodoro_state(timer: State<Timer>) -> Snapshot {
-    timer.0.lock().unwrap().snapshot(Instant::now())
+    timer.with(|_, _| {})
 }
 
 #[tauri::command]
 fn pomodoro_start(timer: State<Timer>) -> Snapshot {
-    let mut t = timer.0.lock().unwrap();
-    t.start(Instant::now());
-    t.snapshot(Instant::now())
+    timer.with(|t, now| t.start(now))
 }
 
 #[tauri::command]
 fn pomodoro_pause(timer: State<Timer>) -> Snapshot {
-    let mut t = timer.0.lock().unwrap();
-    t.pause(Instant::now());
-    t.snapshot(Instant::now())
+    timer.with(|t, now| t.pause(now))
 }
 
 #[tauri::command]
 fn pomodoro_reset(timer: State<Timer>) -> Snapshot {
-    let mut t = timer.0.lock().unwrap();
-    t.reset();
-    t.snapshot(Instant::now())
+    timer.with(|t, _| t.reset())
 }
 
 #[tauri::command]
 fn pomodoro_skip(timer: State<Timer>) -> Snapshot {
-    let mut t = timer.0.lock().unwrap();
-    t.skip(Instant::now());
-    t.snapshot(Instant::now())
+    timer.with(|t, now| t.skip(now))
 }
 
 pub fn run() {
@@ -176,9 +188,12 @@ pub fn run() {
         SessionStore::load(config::data_path("sessions.json"))
     };
 
+    let today = Local::now().date_naive();
+    let saved_count = if cfg.mock { 0 } else { focus_day::load(&config::data_path("pomodoro-day.json"), today) };
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(Timer(Mutex::new(Pomodoro::new(cfg.pomodoro))))
+        .manage(Timer { state: Mutex::new(Pomodoro::new(cfg.pomodoro, today, saved_count)), persist: !cfg.mock })
         .manage(Sessions(Mutex::new(store)))
         .manage(Heartbeats(Mutex::new(activity::HeartbeatCache::default())))
         .setup(|app| {

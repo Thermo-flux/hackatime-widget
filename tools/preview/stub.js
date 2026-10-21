@@ -57,9 +57,10 @@
 
   const POMO = { focus_min: 25, short_break_min: 5, long_break_min: 15 };
   const pomo = () => {
-    const base = { running: false, completed_focus: 2, finished: null, ...POMO };
+    const base = { running: false, completed_focus: scenario === "pomo_many" ? 12 : 2, long_break_every: 4, finished: null, ...POMO };
     switch (scenario) {
       case "pomo_running": return { ...base, phase: "focus", running: true, remaining_secs: 17 * 60 + 23, total_secs: 1500 };
+      case "pomo_many": return { ...base, phase: "focus", remaining_secs: 1500, total_secs: 1500 };
       case "pomo_paused": return { ...base, phase: "focus", remaining_secs: 9 * 60 + 40, total_secs: 1500 };
       case "pomo_break": return { ...base, phase: "short_break", running: true, remaining_secs: 3 * 60 + 12, total_secs: 300 };
       default: return { ...base, phase: "focus", remaining_secs: 1500, total_secs: 1500 };
