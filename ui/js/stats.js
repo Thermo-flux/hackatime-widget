@@ -17,10 +17,23 @@ function show(state) {
   $("panel-stats").setAttribute("aria-busy", String(state === "loading"));
 }
 
-function renderLanguages(languages) {
-  const max = Math.max(1, ...languages.map((l) => l.seconds));
+const LIST_KEY = "hackatime-widget.stats-list";
+const LIST_ROWS = 3; // always three, so every theme shows the same amount
+let listKind = (() => {
+  try { return localStorage.getItem(LIST_KEY) === "projects" ? "projects" : "languages"; } catch { return "languages"; }
+})();
+let lastStats = null;
+
+function renderList() {
+  const items = lastStats?.[listKind] ?? [];
+  document.querySelectorAll("#stats-ok .list-toggle__btn").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.list === listKind)));
+  if (items.length === 0) {
+    $("languages").replaceChildren(el("li", { class: "lang lang--none", text: `No ${listKind} yet` }));
+    return;
+  }
+  const max = Math.max(1, ...items.map((l) => l.seconds));
   $("languages").replaceChildren(
-    ...languages.slice(0, 4).map((l) => {
+    ...items.slice(0, LIST_ROWS).map((l) => {
       const fill = el("span", { class: "lang__fill" });
       fill.style.width = `${(l.seconds / max) * 100}%`;
       return el(
@@ -61,7 +74,8 @@ function render(s) {
         ? `${human.toFixed(0)}% human, ${ai.toFixed(0)}% AI`
         : "AI share unavailable",
   );
-  renderLanguages(s.languages);
+  lastStats = s;
+  renderList();
   $("mock-badge").hidden = !s.mock;
   signal("ai", known && total > 0 ? ai : null);
   signal("empty", total === 0);
@@ -198,6 +212,14 @@ export function init() {
   const retryNow = () => { failures = 0; refresh(); };
   $("stale-retry").addEventListener("click", retryNow);
   $("retry").addEventListener("click", retryNow);
+
+  $("stats-ok").querySelector(".list-toggle").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-list]");
+    if (!btn || btn.dataset.list === listKind) return;
+    listKind = btn.dataset.list;
+    try { localStorage.setItem(LIST_KEY, listKind); } catch { /* private mode etc.: just don't remember */ }
+    renderList();
+  });
 
   const keyError = (on) => {
     $("key-error").hidden = !on;
