@@ -1,0 +1,30 @@
+{
+  "data": [
+    {"range": {"date": "2026-10-15"}, "grand_total": {"total_seconds": 10800},
+     "categories": [{"name": "Coding", "total_seconds": 7200}, {"name": "AI Coding", "total_seconds": 3600}],
+     "languages": [{"name": "Rust", "total_seconds": 6000}, {"name": "TypeScript", "total_seconds": 4800}],
+     "projects": [{"name": "hackatime-widget", "total_seconds": 10800}]},
+    {"range": {"date": "2026-10-16"}, "grand_total": {"total_seconds": 5400},
+     "categories": [{"name": "Coding", "total_seconds": 4500}, {"name": "AI Coding", "total_seconds": 900}],
+     "languages": [{"name": "Python", "total_seconds": 3600}, {"name": "Markdown", "total_seconds": 1800}],
+     "projects": [{"name": "notes-cli", "total_seconds": 5400}]},
+    {"range": {"date": "2026-10-17"}, "grand_total": {"total_seconds": 0},
+     "categories": [], "languages": [], "projects": []},
+    {"range": {"date": "2026-10-18"}, "grand_total": {"total_seconds": 14400},
+     "categories": [{"name": "Coding", "total_seconds": 5400}, {"name": "AI Coding", "total_seconds": 9000}],
+     "languages": [{"name": "Rust", "total_seconds": 9000}, {"name": "HTML", "total_seconds": 3600}, {"name": "CSS", "total_seconds": 1800}],
+     "projects": [{"name": "hackatime-widget", "total_seconds": 14400}]},
+    {"range": {"date": "2026-10-19"}, "grand_total": {"total_seconds": 7200},
+     "categories": [{"name": "Coding", "total_seconds": 6300}, {"name": "Debugging", "total_seconds": 900}],
+     "languages": [{"name": "Rust", "total_seconds": 7200}],
+     "projects": [{"name": "hackatime-widget", "total_seconds": 7200}]},
+    {"range": {"date": "2026-10-20"}, "grand_total": {"total_seconds": 9000},
+     "categories": [{"name": "Coding", "total_seconds": 6300}, {"name": "AI Coding", "total_seconds": 2700}],
+     "languages": [{"name": "TypeScript", "total_seconds": 5400}, {"name": "Rust", "total_seconds": 3600}],
+     "projects": [{"name": "notes-cli", "total_seconds": 3600}, {"name": "hackatime-widget", "total_seconds": 5400}]},
+    {"range": {"date": "2026-10-21"}, "grand_total": {"total_seconds": 6300},
+     "categories": [{"name": "Coding", "total_seconds": 3600}, {"name": "AI Coding", "total_seconds": 2700}],
+     "languages": [{"name": "Rust", "total_seconds": 4500}, {"name": "JavaScript", "total_seconds": 1800}],
+     "projects": [{"name": "hackatime-widget", "total_seconds": 6300}]}
+  ]
+}

@@ -1,0 +1,107 @@
+/* Per-theme flourishes and mascot poses. Palettes live in js/themes/data.js and are applied as CSS variables
+   on <html>; only decoration that variables can't express goes here, keyed by [data-skin].
+   Poses use `animation: none` because the default bob animation also drives `transform`. */
+
+/* ---------- Guac Star (avocado) ---------- */
+:root[data-skin="avocado"] .tile { border-radius: 45% 45% var(--radius-md) var(--radius-md) / 22% 22% var(--radius-md) var(--radius-md); }
+:root[data-skin="avocado"] .mascot-bar[data-mood="focus"] canvas { animation: none; }
+:root[data-skin="avocado"] .mascot-bar[data-mood="break"] canvas { animation: none; transform: rotate(90deg); }
+:root[data-skin="avocado"] .mascot-bar[data-mood="error"] canvas { filter: sepia(0.6); }
+
+/* ---------- Pomo-dorable (tomato) ---------- */
+:root[data-skin="tomato"] .btn--primary { box-shadow: 0 3px 0 #9e1f17; }
+:root[data-skin="tomato"] .btn--primary:active:not(:disabled) { box-shadow: none; transform: translateY(3px); }
+:root[data-skin="tomato"] .mascot-bar[data-mood="focus"] canvas { filter: drop-shadow(0 0 6px var(--accent)); }
+:root[data-skin="tomato"] .mascot-bar[data-mood="break"] canvas { animation: none; transform: scaleY(0.85) translateY(3px); }
+:root[data-skin="tomato"] .mascot-bar[data-mood="error"] canvas { animation: none; transform: scale(1.08, 0.92); }
+
+/* ---------- Midnight Mochi (cat) ---------- */
+:root[data-skin="cat"] .seg__btn[aria-selected="true"],
+:root[data-skin="cat"] .seg__btn[aria-pressed="true"] { box-shadow: 0 0 0 1px var(--accent), 0 0 10px rgba(244, 166, 192, 0.35); }
+:root[data-skin="cat"] .mascot-bar[data-mood="break"] canvas { animation: none; transform: rotate(-8deg); }
+:root[data-skin="cat"] .mascot-bar[data-mood="error"] canvas { animation: none; transform: rotate(90deg); }
+
+/* ---------- Good Boy Biscuit (dog) ---------- */
+:root[data-skin="dog"] .btn { border-width: 2px; box-shadow: 2px 2px 0 var(--border); }
+:root[data-skin="dog"] .btn:active:not(:disabled) { box-shadow: none; transform: translate(2px, 2px); }
+:root[data-skin="dog"] .mascot-bar[data-mood="focus"] canvas { animation: none; }
+:root[data-skin="dog"] .mascot-bar[data-mood="human"] canvas { animation: wag 0.25s steps(2) infinite; }
+:root[data-skin="dog"] .mascot-bar[data-mood="break"] canvas { animation: none; transform: translateY(3px); }
+@keyframes wag { 50% { transform: skewX(6deg); } }
+
+/* ---------- Neon Drone NX-16 (futuristic) ---------- */
+:root[data-skin="neon"] .card { background-image: repeating-linear-gradient(0deg, rgba(63, 245, 255, 0.04) 0 1px, transparent 1px 3px); }
+:root[data-skin="neon"] .btn { clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
+:root[data-skin="neon"] .mascot-bar[data-mood="focus"] canvas { filter: brightness(0.7); }
+:root[data-skin="neon"] .mascot-bar[data-mood="break"] canvas { animation: none; transform: translateY(3px); }
+:root[data-skin="neon"] .mascot-bar[data-mood="error"] canvas { animation: jitter 0.2s steps(2) infinite; }
+@keyframes jitter { 50% { transform: translateX(3px); } }
+
+/* ---------- Ribbit.exe (frog) ---------- */
+:root[data-skin="frog"] .btn--primary { border-radius: var(--radius-pill); box-shadow: 0 4px 0 #2f7d32; }
+:root[data-skin="frog"] .mascot-bar[data-mood="focus"] canvas { animation: none; }
+:root[data-skin="frog"] .mascot-bar[data-mood="break"] canvas { animation: none; transform: translateY(3px); }
+:root[data-skin="frog"] .mascot-bar[data-mood="error"] canvas { animation: none; transform: rotate(180deg); }
+
+/* ---------- Boo-lean (ghost) ---------- */
+:root[data-skin="ghost"] .tile, :root[data-skin="ghost"] .seg { border: 1px dashed var(--border); }
+:root[data-skin="ghost"] .mascot-bar canvas { animation-duration: 3s; }
+:root[data-skin="ghost"] .mascot-bar[data-mood="focus"] canvas { animation: none; opacity: 1; }
+:root[data-skin="ghost"] .mascot-bar[data-mood="break"] canvas { animation: none; opacity: 0.5; }
+:root[data-skin="ghost"] .mascot-bar[data-mood="error"] canvas { animation: none; opacity: 0.35; }
+
+/* ---------- Shroomie (mushroom) ---------- */
+:root[data-skin="mushroom"] .card { border: 3px double var(--border); }
+:root[data-skin="mushroom"] .section-title { font-variant: small-caps; text-transform: none; letter-spacing: 0.02em; }
+:root[data-skin="mushroom"] .mascot-bar canvas { transform-origin: 50% 100%; animation: sway 3s ease-in-out infinite; }
+:root[data-skin="mushroom"] .mascot-bar[data-mood="focus"] canvas { animation: none; transform: rotate(5deg); }
+:root[data-skin="mushroom"] .mascot-bar[data-mood="break"] canvas { animation: none; transform: scaleY(0.94); }
+:root[data-skin="mushroom"] .mascot-bar[data-mood="error"] canvas { animation: none; transform: scaleY(0.9); }
+@keyframes sway { 50% { transform: rotate(3deg); } }
+
+/* ---------- Bubble Tea Buddy (boba) ---------- */
+:root[data-skin="boba"] .stat-bar { height: 10px; }
+:root[data-skin="boba"] .stat-bar__human,
+:root[data-skin="boba"] .stat-bar__ai { background-image: radial-gradient(circle, rgba(0, 0, 0, 0.28) 1.5px, transparent 2px); background-size: 6px 6px; }
+:root[data-skin="boba"] .mascot-bar[data-mood="focus"] canvas { animation: none; }
+:root[data-skin="boba"] .mascot-bar[data-mood="error"] canvas { animation: none; transform: rotate(-20deg); }
+
+/* ---------- Green Screen Gary (phosphor) ---------- */
+:root[data-skin="phosphor"] .card { background-image: repeating-linear-gradient(to bottom, rgba(57, 255, 122, 0.06) 0 1px, transparent 1px 3px); text-shadow: 0 0 4px rgba(57, 255, 122, 0.5); }
+:root[data-skin="phosphor"] .mascot-bar[data-mood="focus"] canvas { filter: brightness(1.2); }
+:root[data-skin="phosphor"] .mascot-bar[data-mood="error"] canvas { animation: flicker 0.3s steps(2) infinite; }
+@keyframes flicker { 50% { opacity: 0.6; } }
+
+/* ---------- Pengu Pingu (penguin) ---------- */
+:root[data-skin="penguin"] .tile { border-top: 3px solid #ffffff; box-shadow: inset 0 -2px 0 var(--border); }
+:root[data-skin="penguin"] .mascot-bar canvas { animation: waddle 1s steps(1) infinite; }
+:root[data-skin="penguin"] .mascot-bar[data-mood="focus"] canvas { animation: none; }
+:root[data-skin="penguin"] .mascot-bar[data-mood="break"] canvas { animation: none; transform: rotate(-90deg); }
+:root[data-skin="penguin"] .mascot-bar[data-mood="error"] canvas { animation: jitter 0.1s steps(2) infinite; }
+@keyframes waddle { 50% { transform: rotate(4deg); } }
+
+/* ---------- Jelly Deep (jellyfish) ---------- */
+:root[data-skin="jelly"] .ring__progress { filter: drop-shadow(0 0 4px var(--phase-color)); }
+:root[data-skin="jelly"] .dot--human { box-shadow: 0 0 6px var(--human); }
+:root[data-skin="jelly"] .dot--ai { box-shadow: 0 0 6px var(--ai); }
+:root[data-skin="jelly"] .mascot-bar canvas { filter: drop-shadow(0 0 5px #9fe7ff); animation-duration: 3s; animation-timing-function: ease-in-out; }
+:root[data-skin="jelly"] .mascot-bar[data-mood="break"] canvas { animation: none; opacity: 0.75; transform: translateY(3px); }
+:root[data-skin="jelly"] .mascot-bar[data-mood="error"] canvas { animation: none; filter: grayscale(0.6); }
+
+/* Non-colour cue so the human and AI parts of the bar differ for colour-blind users too. */
+:root[data-skin] .stat-bar__ai { box-shadow: inset 1px 0 0 var(--bg); }
+
+/* ---------- Reactions (every skin) ----------
+   mascot.js sets data-expr (current expression) and data-react (while a short reaction plays). These come last
+   with the same specificity as the per-skin poses above, so a reaction's motion wins over the mood pose. */
+:root .mascot-bar[data-react][data-expr="excited"] canvas { animation: hop 0.4s steps(2) infinite; }
+:root .mascot-bar[data-react][data-expr="surprised"] canvas { animation: hop 0.3s steps(2) 1; }
+:root .mascot-bar[data-react][data-expr="dizzy"] canvas { animation: dizzy 0.8s steps(4) infinite; }
+:root .mascot-bar[data-react][data-expr="love"] canvas { animation: pulse 0.7s steps(2) infinite; }
+:root .mascot-bar[data-react][data-expr="grumpy"] canvas { animation: jitter 0.15s steps(2) 4; }
+:root .mascot-bar[data-react][data-expr="proud"] canvas { animation: none; transform: translateY(-3px); }
+@keyframes dizzy { 25% { transform: rotate(-8deg); } 75% { transform: rotate(8deg); } }
+@keyframes pulse { 50% { transform: scale(1.08); } }
+@media (prefers-reduced-motion: reduce) {
+  :root .mascot-bar[data-react] canvas { animation: none; transform: none; }
+}

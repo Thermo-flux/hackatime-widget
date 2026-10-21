@@ -1,0 +1,12 @@
+# build output
+/target/
+/src-tauri/target/
+/src-tauri/gen/
+# local, per-user data: never commit these (config.json holds an API key)
+config.json
+sessions.json
+webview-data/
+
+# stray test screenshots
+/*.png
+!/app-icon.png

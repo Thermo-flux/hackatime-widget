@@ -1,0 +1,33 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: transparent; /* the window is transparent; .card draws the surface */
+  color: var(--fg);
+  font: var(--fw-regular) var(--fs-sm) / 1.4 var(--font);
+}
+
+html, body { height: 100%; overflow: hidden; } /* fixed-size widget: never scroll */
+
+body {
+  /* Per-side inset of the card inside the (fixed 320x436) window. Themes raise these to make room for decorations. */
+  padding: var(--pad-t, 6px) var(--pad-r, 6px) var(--pad-b, 6px) var(--pad-l, 6px);
+  cursor: default;
+  user-select: none; /* it's a widget, not a document */
+  -webkit-user-select: none;
+}
+input { user-select: text; -webkit-user-select: text; cursor: text; }
+button { cursor: pointer; }
+
+[hidden] { display: none !important; }
+
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+h2, p, ul { margin: 0; padding: 0; }
+ul { list-style: none; }
+
+.tabular { font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}

@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; connect-src 'self' ipc: http://ipc.localhost; script-src 'self'; style-src 'self'; img-src 'self' data:" />
+  <title>Hackatime</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- .shell is the unclipped outer box: themes hang their outline/shadow filter and decorations (ears, leaves,
+       antennas) on it. .card is the shaped surface (border-radius / clip-path / mask) that holds the content. -->
+  <div class="shell" id="shell">
+  <main class="card" data-tauri-drag-region>
+    <header class="header" data-tauri-drag-region>
+      <div class="header__top" data-tauri-drag-region>
+        <div class="seg" role="tablist" aria-label="View" id="tabs">
+          <button class="seg__btn" role="tab" id="tab-stats" aria-controls="panel-stats" aria-selected="true">Stats</button>
+          <button class="seg__btn" role="tab" id="tab-sessions" aria-controls="panel-sessions" aria-selected="false" tabindex="-1">Sessions</button>
+          <button class="seg__btn" role="tab" id="tab-pomodoro" aria-controls="panel-pomodoro" aria-selected="false" tabindex="-1">Pomodoro</button>
+        </div>
+        <span class="badge badge--warn" id="mock-badge" title="Showing sample data" hidden>Demo</span>
+        <button class="icon-btn" id="close" type="button" aria-label="Quit Hackatime widget" title="Quit">&times;</button>
+      </div>
+    </header>
+
+    <section class="view view-stats" id="panel-stats" role="tabpanel" aria-labelledby="tab-stats" aria-busy="true">
+      <div class="seg" role="group" aria-label="Time range" id="ranges">
+        <button class="seg__btn" data-range="today" aria-pressed="true">Day</button>
+        <button class="seg__btn" data-range="week" aria-pressed="false">Week</button>
+        <button class="seg__btn" data-range="month" aria-pressed="false">Month</button>
+        <button class="seg__btn" data-range="all" aria-pressed="false">All</button>
+      </div>
+
+      <div id="stats-ok" class="view" hidden>
+        <div class="total tabular" id="total">0h 0m</div>
+        <div class="stat-bar" id="stat-bar" role="img" aria-label="No data">
+          <span class="stat-bar__human" id="bar-human"></span>
+          <span class="stat-bar__ai" id="bar-ai"></span>
+        </div>
+        <div class="legend">
+          <span><i class="dot dot--human"></i>Human <strong id="human">0m</strong> · <span id="human-pct">0%</span></span>
+          <span><i class="dot dot--ai"></i>AI <strong id="ai">0m</strong> · <span id="ai-pct">0%</span></span>
+        </div>
+        <div class="langs">
+          <h2 class="section-title">Top languages</h2>
+          <ul id="languages"></ul>
+        </div>
+      </div>
+
+      <form id="stats-key" class="view" hidden>
+        <p class="notice" id="key-msg">Connect your Hackatime account to see your stats.</p>
+        <div class="field">
+          <label class="field__label" for="key">API key</label>
+          <input class="field__input" id="key" type="password" autocomplete="off" required />
+        </div>
+        <button class="btn btn--primary" id="save" type="submit">Connect</button>
+        <p class="hint">Your key is on the Hackatime setup page: <strong>hackatime.hackclub.com/my/wakatime_setup</strong>. If Hackatime is already set up in your editor, this widget finds the key by itself.</p>
+      </form>
+
+      <div id="stats-error" class="view" hidden>
+        <p class="notice notice--error" id="error-msg" role="alert"></p>
+        <button class="btn" id="retry" type="button">Retry</button>
+      </div>
+    </section>
+
+    <section class="view view-sessions" id="panel-sessions" role="tabpanel" aria-labelledby="tab-sessions" hidden>
+      <div class="view" id="sess-idle">
+        <button class="btn btn--primary btn--block" id="sess-start" type="button" disabled>Start session</button>
+        <div class="tiles">
+          <div class="tile"><div class="tile__value tabular" id="sum-count">0</div><div class="tile__label">Sessions</div></div>
+          <div class="tile"><div class="tile__value tabular" id="sum-total">0h 0m</div><div class="tile__label">Total time</div></div>
+          <div class="tile"><div class="tile__value tabular" id="sum-avg">0m</div><div class="tile__label">Avg length</div></div>
+        </div>
+        <div class="regular">
+          <span><strong id="sum-streak">0</strong> day streak <span class="muted">· best <span id="sum-best">0</span></span></span>
+          <span title="Days with a session in the last 14"><strong id="sum-active">0</strong>/<span id="sum-window">14</span> active</span>
+        </div>
+        <div class="chart" id="sum-chart" role="img" aria-label="Time per day, last 14 days"></div>
+        <div class="legend">
+          <span>Today <strong id="sum-today">0m</strong></span>
+          <span>Last 7 days <strong id="sum-week">0h 0m</strong></span>
+        </div>
+      </div>
+
+      <div class="view" id="sess-live" hidden>
+        <div class="live-head"><span class="live-dot" aria-hidden="true"></span>Session in progress</div>
+        <div class="total tabular" id="live-elapsed">00:00:00</div>
+        <div class="stat-bar" id="live-bar" role="img" aria-label="No coding activity yet">
+          <span class="stat-bar__human" id="live-bar-human"></span>
+          <span class="stat-bar__ai" id="live-bar-ai"></span>
+        </div>
+        <div class="legend">
+          <span><i class="dot dot--human"></i>Human <strong id="live-human">–</strong></span>
+          <span><i class="dot dot--ai"></i>AI <strong id="live-ai">–</strong></span>
+        </div>
+        <div class="tiles">
+          <div class="tile"><div class="tile__value tabular" id="live-coding">–</div><div class="tile__label">Coding</div></div>
+          <div class="tile"><div class="tile__value tabular" id="live-focus">–</div><div class="tile__label">Focus</div></div>
+          <div class="tile"><div class="tile__value tabular" id="live-today">–</div><div class="tile__label">Today</div></div>
+        </div>
+        <p class="notice" id="live-note"></p>
+        <button class="btn btn--danger btn--block" id="sess-stop" type="button">End session</button>
+      </div>
+
+      <p class="notice notice--error" id="sess-error" role="alert" hidden></p>
+    </section>
+
+    <section class="view view-pomodoro" id="panel-pomodoro" role="tabpanel" aria-labelledby="tab-pomodoro" data-phase="focus" hidden>
+      <div class="phase" id="pomo-phase">Focus</div>
+      <!-- The ring is the start/pause button. data-state: idle | running | paused (styles + hint). -->
+      <button class="ring" id="pomo-toggle" type="button" data-state="idle" aria-label="Start Focus, 25:00" aria-describedby="pomo-sessions">
+        <svg viewBox="0 0 120 120" aria-hidden="true">
+          <circle class="ring__face" cx="60" cy="60" r="45" />
+          <circle class="ring__track" cx="60" cy="60" r="52" />
+          <circle class="ring__progress" id="pomo-progress" cx="60" cy="60" r="52" />
+        </svg>
+        <span class="ring__body" aria-hidden="true">
+          <span class="ring__time tabular" id="pomo-time">25:00</span>
+          <span class="ring__hint" id="pomo-hint">
+            <svg class="ring__icon ring__icon--play" viewBox="0 0 10 10"><path d="M2 1.2v7.6L8.6 5z" /></svg>
+            <svg class="ring__icon ring__icon--pause" viewBox="0 0 10 10"><path d="M2 1.5h2.2v7H2zM5.8 1.5H8v7H5.8z" /></svg>
+            <span id="pomo-hint-text">Start</span>
+          </span>
+        </span>
+      </button>
+      <div class="controls" id="pomo-controls">
+        <button class="btn" id="pomo-reset" type="button" disabled>Reset</button>
+        <button class="btn btn--ghost" id="pomo-skip" type="button" title="Go to the next phase">Skip</button>
+        <button class="btn btn--ghost" id="pomo-set" type="button" aria-expanded="false" aria-controls="pomo-settings" aria-describedby="pomo-lengths">Times</button>
+      </div>
+      <p class="sessions" id="pomo-sessions"><span id="pomo-lengths">25 / 5 min</span> · <span id="pomo-count">0 done</span></p>
+      <p class="sr-only" id="pomo-status" aria-live="polite"></p>
+
+      <div class="pomo-settings" id="pomo-settings" role="group" aria-labelledby="pomo-settings-title" hidden>
+        <h2 class="pomo-settings__title" id="pomo-settings-title">Timer lengths</h2>
+        <div class="chips" role="group" aria-label="Presets" id="pomo-presets">
+          <button class="chip" type="button" data-preset="25,5,15" aria-pressed="false" aria-label="Preset: 25 minutes focus, 5 rest">25/5</button>
+          <button class="chip" type="button" data-preset="50,10,30" aria-pressed="false" aria-label="Preset: 50 minutes focus, 10 rest">50/10</button>
+          <button class="chip" type="button" data-preset="90,20,30" aria-pressed="false" aria-label="Preset: 90 minutes focus, 20 rest">90/20</button>
+        </div>
+        <div class="stepper" data-key="focus_min" data-min="1" data-max="180">
+          <span class="stepper__label" id="pomo-l-focus">Focus</span>
+          <button class="stepper__btn" type="button" data-dir="-1" tabindex="-1" aria-label="Shorter focus">&minus;</button>
+          <span class="stepper__val tabular" role="spinbutton" tabindex="0" aria-labelledby="pomo-l-focus" aria-valuemin="1" aria-valuemax="180" aria-valuenow="25">25 min</span>
+          <button class="stepper__btn" type="button" data-dir="1" tabindex="-1" aria-label="Longer focus">+</button>
+        </div>
+        <div class="stepper" data-key="short_break_min" data-min="1" data-max="60">
+          <span class="stepper__label" id="pomo-l-rest">Rest</span>
+          <button class="stepper__btn" type="button" data-dir="-1" tabindex="-1" aria-label="Shorter rest">&minus;</button>
+          <span class="stepper__val tabular" role="spinbutton" tabindex="0" aria-labelledby="pomo-l-rest" aria-valuemin="1" aria-valuemax="60" aria-valuenow="5">5 min</span>
+          <button class="stepper__btn" type="button" data-dir="1" tabindex="-1" aria-label="Longer rest">+</button>
+        </div>
+        <div class="stepper" data-key="long_break_min" data-min="1" data-max="90">
+          <span class="stepper__label" id="pomo-l-long">Long rest</span>
+          <button class="stepper__btn" type="button" data-dir="-1" tabindex="-1" aria-label="Shorter long rest">&minus;</button>
+          <span class="stepper__val tabular" role="spinbutton" tabindex="0" aria-labelledby="pomo-l-long" aria-valuemin="1" aria-valuemax="90" aria-valuenow="15">15 min</span>
+          <button class="stepper__btn" type="button" data-dir="1" tabindex="-1" aria-label="Longer long rest">+</button>
+        </div>
+        <p class="hint pomo-settings__note" id="pomo-settings-note">Applies right away.</p>
+        <div class="pomo-settings__actions">
+          <button class="btn btn--primary" id="pomo-save" type="button" aria-describedby="pomo-settings-note">Save</button>
+          <button class="btn btn--ghost" id="pomo-cancel" type="button">Cancel</button>
+        </div>
+      </div>
+    </section>
+
+    <footer class="mascot-bar" id="mascot-bar" data-mood="idle">
+      <button class="mascot-btn" id="mascot-btn" type="button" aria-label="Pet the mascot">
+        <canvas id="mascot" width="16" height="16" aria-hidden="true"></canvas>
+      </button>
+      <p class="mascot-say" id="mascot-say" aria-live="polite"></p>
+      <button class="btn btn--ghost" id="theme-btn" type="button" aria-haspopup="dialog" aria-expanded="false">Theme</button>
+    </footer>
+
+    <section class="picker" id="theme-picker" role="dialog" aria-label="Choose a theme" hidden>
+      <h2 class="section-title">Choose a theme</h2>
+      <div class="picker__grid" id="picker-grid"></div>
+      <button class="btn btn--block" id="picker-close" type="button">Done</button>
+    </section>
+  </main>
+  <i class="deco deco-a" aria-hidden="true"></i>
+  <i class="deco deco-b" aria-hidden="true"></i>
+  </div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

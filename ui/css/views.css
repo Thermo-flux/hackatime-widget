@@ -1,0 +1,88 @@
+/* Layout only; component looks live in components.css. */
+.header { display: grid; gap: var(--space-2); }
+.header__top { display: flex; align-items: center; gap: var(--space-2); }
+.header__top .seg { flex: 1 1 0; min-width: 0; } /* fixed width so tabs don't jump when the badge hides */
+.header__top .icon-btn { margin-left: auto; }
+
+.view { display: flex; flex-direction: column; gap: var(--space-3); flex: 1; min-height: 0; }
+
+.total { font-size: var(--fs-xl); font-weight: var(--fw-bold); line-height: 1.1; }
+.view[aria-busy="true"] .total,
+.view[aria-busy="true"] .legend,
+.view[aria-busy="true"] .langs { opacity: 0.5; }
+
+/* Pomodoro: phase label sits where the range tabs sit on the stats view. */
+.view-pomodoro { align-items: center; }
+.view-pomodoro[data-phase="focus"] { --phase-color: var(--accent); }
+.view-pomodoro[data-phase="short_break"] { --phase-color: var(--success); }
+.view-pomodoro[data-phase="long_break"] { --phase-color: var(--violet); }
+
+.phase {
+  align-self: stretch;
+  min-height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--phase-color);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+.controls { display: flex; gap: var(--space-2); justify-content: center; }
+.sessions { padding: 1px 8px; border-radius: var(--radius-pill); color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
+/* After saving new lengths the line that shows them flashes once. */
+.sessions.is-updated { animation: pomo-flash 1.6s ease-out; }
+@keyframes pomo-flash { from { background: color-mix(in srgb, var(--phase-color) 28%, transparent); color: var(--fg); } }
+
+/* Pomodoro length settings replace the phase label, ring and controls while open. */
+.pomo-settings { align-self: stretch; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.pomo-settings__title {
+  min-height: 28px; display: grid; place-items: center;
+  border-radius: var(--radius-md); background: var(--surface-2);
+  color: var(--fg); font-size: var(--fs-sm); font-weight: var(--fw-semibold);
+}
+.chips { display: flex; gap: 6px; }
+.chip {
+  flex: 1; min-height: 26px; padding: 0 4px;
+  border: 1px solid var(--border); border-radius: var(--radius-pill); background: none;
+  color: var(--muted); font: inherit; font-size: var(--fs-xs); font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums; cursor: pointer; transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+.chip:hover { border-color: var(--phase-color); color: var(--fg); }
+.chip[aria-pressed="true"] { border-color: var(--phase-color); background: var(--phase-color); color: var(--on-accent); }
+
+.stepper { display: grid; grid-template-columns: minmax(0, 1fr) 28px 62px 28px; align-items: center; gap: 4px; }
+.stepper__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--fs-sm); }
+.stepper__val {
+  min-height: 28px; display: grid; place-items: center; border-radius: var(--radius-md);
+  font-weight: var(--fw-semibold); white-space: nowrap; cursor: ns-resize;
+}
+.stepper__val:focus-visible { outline-offset: 0; background: var(--surface-2); }
+.stepper__btn {
+  height: 28px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface-2); color: var(--fg); font: inherit; font-size: var(--fs-lg); line-height: 1;
+  cursor: pointer; touch-action: none; transition: border-color 0.12s, background-color 0.12s;
+}
+.stepper__btn:hover:not(:disabled) { background: var(--bg); border-color: var(--phase-color); }
+.stepper__btn:active:not(:disabled) { background: var(--phase-color); border-color: var(--phase-color); color: var(--on-accent); }
+.stepper__btn:disabled { opacity: 0.35; cursor: default; }
+.pomo-settings__note { min-height: 2.6em; text-align: center; }
+.pomo-settings__note.notice--error { color: var(--danger); }
+.pomo-settings__actions { display: flex; gap: var(--space-2); justify-content: center; }
+/* Short views (tall theme decorations, the smaller hidden test window): a tighter rhythm keeps Save clear of the footer.
+   The nearest size container here is .view-pomodoro (see shapes.css). */
+@container (max-height: 250px) {
+  .pomo-settings { gap: 5px; }
+  .pomo-settings__title { min-height: 22px; font-size: var(--fs-xs); }
+  .chip { min-height: 24px; }
+  .stepper__btn, .stepper__val { height: 26px; min-height: 26px; }
+  .pomo-settings__actions .btn { min-height: 30px; }
+}
+@container (max-height: 214px) {
+  .pomo-settings__title { display: none; } /* the Times button that opened it already says what this is */
+}
+
+/* Header fits three tabs + demo pill + close in the 288px card. */
+.header__top .seg__btn { flex: 1 1 auto; padding: 0 5px; font-size: 13px; }
+.view-sessions { justify-content: flex-start; }
+.view-sessions .notice { margin: 0; }

@@ -1,0 +1,226 @@
+/* ---- Card ---- */
+.shell { position: relative; height: 100%; }
+/* Decoration slots: hidden unless a theme styles them. They never take clicks. */
+.deco { position: absolute; display: none; pointer-events: none; }
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  height: 100%;
+  overflow: hidden;
+  padding: var(--space-4);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+/* ---- Segmented control (tabs) ---- */
+.seg {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+}
+.seg__btn {
+  flex: 1;
+  min-height: 28px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.seg__btn:hover { color: var(--fg); }
+.seg__btn[aria-selected="true"],
+.seg__btn[aria-pressed="true"] {
+  background: var(--bg);
+  color: var(--fg);
+  font-weight: var(--fw-semibold);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.15);
+}
+
+/* ---- Buttons ---- */
+.btn {
+  min-height: 32px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) { background: var(--surface-2); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn--primary {
+  min-width: 80px;
+  border-color: var(--phase-color, var(--accent));
+  background: var(--phase-color, var(--accent));
+  color: var(--on-accent);
+  font-weight: var(--fw-semibold);
+}
+.btn--primary:hover:not(:disabled) { background: var(--phase-color, var(--accent)); filter: brightness(1.08); }
+.btn--ghost { border-color: transparent; color: var(--muted); }
+
+.icon-btn {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--fs-lg);
+  line-height: 1;
+  cursor: pointer;
+}
+.icon-btn:hover { background: var(--surface-2); color: var(--danger); }
+
+/* ---- Badge ---- */
+.badge {
+  align-self: flex-start;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+}
+.badge--warn { background: var(--warn-bg); color: var(--warn); }
+.badge.is-off { visibility: hidden; } /* keep its space so the tabs don't jump on the Pomodoro tab */
+
+/* ---- Stat bar: human | ai ---- */
+.stat-bar {
+  display: flex;
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2); /* neutral track, so zero data is not "100% human" */
+}
+.stat-bar__human { background: var(--human); }
+.stat-bar__ai { background: var(--ai); }
+
+.legend { display: flex; justify-content: space-between; color: var(--muted); font-size: var(--fs-xs); }
+.legend strong { color: var(--fg); font-weight: var(--fw-semibold); }
+.dot { display: inline-block; width: 8px; height: 8px; margin-right: var(--space-1); border-radius: 50%; }
+.dot--human { background: var(--human); }
+.dot--ai { background: var(--ai); }
+
+/* ---- Rows ---- */
+.section-title {
+  margin-bottom: var(--space-1);
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.lang { display: grid; grid-template-columns: 1fr auto; gap: 0 var(--space-3); padding: 2px 0; }
+.lang__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lang__time { color: var(--muted); }
+.lang__bar { grid-column: 1 / -1; height: 3px; margin-top: 2px; border-radius: var(--radius-pill); background: var(--surface-2); overflow: hidden; }
+.lang__fill { display: block; height: 100%; background: var(--human); opacity: 0.6; }
+
+/* ---- Form / messages ---- */
+.field { display: grid; gap: var(--space-1); }
+.field__label { color: var(--muted); font-size: var(--fs-xs); }
+.field__input {
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--muted);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+}
+.notice { color: var(--muted); }
+.notice--error { color: var(--danger); }
+
+/* ---- Pomodoro ring: the ring is the start / pause button ----
+   data-state on the button: idle (not started) | running | paused. The pill under the time says what a click does. */
+.ring {
+  --ring-c: var(--phase-color, var(--accent));
+  position: relative; width: 150px; height: 150px; margin: 0 auto; padding: 0;
+  border: 0; border-radius: 50%; background: none; color: inherit; font: inherit; cursor: pointer;
+  transition: transform 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.ring:hover { transform: scale(1.025); }
+.ring:active { transform: scale(0.96); transition-duration: 0.06s; }
+.ring:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.ring > svg { display: block; width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+.ring circle { fill: none; stroke-width: 8; }
+.ring__track { stroke: var(--surface-2); }
+.ring__progress { stroke: var(--ring-c); stroke-linecap: round; transition: stroke-dashoffset 1s linear, opacity 0.2s, stroke 0.3s; }
+.ring__progress.is-snap { transition: opacity 0.2s, stroke 0.3s; }
+/* The inner disc reads as the button's surface: a faint tint that deepens on hover and press. */
+.ring .ring__face { fill: var(--ring-c); fill-opacity: 0.06; stroke: none; transition: fill-opacity 0.15s; }
+.ring:hover .ring__face, .ring:focus-visible .ring__face { fill-opacity: 0.13; }
+.ring:active .ring__face { fill-opacity: 0.22; }
+
+.ring__body { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding-top: 14px; pointer-events: none; }
+.ring__time { font-size: var(--fs-xl); font-weight: var(--fw-bold); line-height: 1; transition: opacity 0.2s; }
+.ring__hint {
+  display: inline-flex; align-items: center; gap: 4px;
+  min-height: 18px; padding: 0 8px; border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--ring-c) 15%, transparent);
+  color: var(--ring-c); font-size: 10.5px; font-weight: var(--fw-semibold); letter-spacing: 0.06em; text-transform: uppercase; line-height: 1;
+  transition: background-color 0.15s, color 0.15s;
+}
+.ring__icon { width: 8px; height: 8px; fill: currentColor; flex: none; }
+.ring__icon--pause, .ring[data-state="running"] .ring__icon--play { display: none; }
+.ring[data-state="running"] .ring__icon--pause { display: block; }
+/* Hover / keyboard focus: the pill fills in, so it's clear the whole ring is the button. */
+.ring:hover .ring__hint, .ring:focus-visible .ring__hint { background: var(--ring-c); color: var(--on-accent); }
+/* Running: the pill steps back while you work; the progress end breathes softly. */
+.ring[data-state="running"] .ring__hint { background: transparent; color: var(--muted); }
+.ring[data-state="running"]:hover .ring__hint, .ring[data-state="running"]:focus-visible .ring__hint { background: var(--surface-2); color: var(--fg); }
+.ring[data-state="running"] .ring__face { animation: ring-breathe 4s ease-in-out infinite; }
+@keyframes ring-breathe { 50% { fill-opacity: 0.12; } }
+/* Paused: dimmed progress and a slow blink on the time, like a paused clock. */
+.ring[data-state="paused"] .ring__progress { opacity: 0.5; }
+.ring[data-state="paused"] .ring__time { animation: ring-blink 2s ease-in-out infinite; }
+@keyframes ring-blink { 50% { opacity: 0.4; } }
+@media (prefers-reduced-motion: reduce) {
+  .ring:hover, .ring:active { transform: none; }
+  .ring[data-state="paused"] .ring__time { opacity: 0.6; } /* still distinct without the blink */
+}
+
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+/* ---- Tiles ---- */
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); }
+.tile { padding: var(--space-2); border-radius: var(--radius-md); background: var(--surface-2); text-align: center; min-width: 0; }
+.tile__value { font-size: var(--fs-lg); font-weight: var(--fw-bold); line-height: 1.2; white-space: nowrap; }
+.tile__label { color: var(--muted); font-size: var(--fs-xs); }
+
+.btn--block { width: 100%; min-height: 36px; }
+.btn--danger { border-color: var(--danger); color: var(--danger); }
+.btn--danger:hover:not(:disabled) { background: var(--danger); color: var(--on-accent); }
+.muted { color: var(--muted); }
+
+/* ---- Regularity ---- */
+.regular { display: flex; justify-content: space-between; gap: var(--space-2); font-size: var(--fs-sm); }
+.regular strong { font-weight: var(--fw-bold); }
+.chart { display: flex; align-items: flex-end; gap: 3px; height: 44px; }
+.chart__bar { flex: 1; min-height: 2px; border-radius: 2px; background: var(--human); opacity: 0.55; }
+.chart__bar--empty { background: var(--surface-2); opacity: 1; }
+.chart__bar--today { opacity: 1; }
+
+/* ---- Live session ---- */
+.live-head { display: flex; align-items: center; gap: var(--space-2); color: var(--muted); font-size: var(--fs-xs); font-weight: var(--fw-semibold); letter-spacing: 0.05em; text-transform: uppercase; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.3; } }
+
+.hint { color: var(--muted); font-size: var(--fs-xs); user-select: text; -webkit-user-select: text; }
+.hint strong { color: var(--fg); font-weight: var(--fw-semibold); word-break: break-all; }
+
+/* Wide theme fonts: keep labels on one line; values are shrunk to fit by js/fit.js. */
+.tile__label { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.regular { font-size: 13px; flex-wrap: wrap; row-gap: 2px; }

@@ -1,0 +1,267 @@
+/* Theme silhouettes. Each theme reshapes the widget, not only its colours (see design/shapes-brief.md).
+   Structure: body (padding = --pad-*) > .shell (unclipped; outline/shadow filters, decorations) > .card (the shaped
+   surface, holds all content). .deco-a/.deco-b are free decoration slots, never clickable.
+   Rule of thumb: content must stay fully inside the shape and clickable; tools/shape-check.mjs verifies it.
+   Shapes that cut the card (clip-path / mask) get their outline from zero-blur drop-shadows on .shell, which
+   follow any shape, including decorations. Blur on .shell stays small because the mascot animates inside it. */
+
+/* ---------- Shared ---------- */
+.shell { isolation: isolate; }
+.picker { padding: inherit; } /* the overlay follows each theme's content insets */
+.deco::before, .deco::after { content: ""; position: absolute; pointer-events: none; }
+
+/* Elastic layout so shapes can take room without clipping content (no visible change while there is room):
+   header tabs may shrink, the Pomodoro ring follows the free height, the 14-day chart may flatten, and languages
+   that don't fit wrap into a clipped second column (whole rows disappear instead of being cut in half). */
+.header__top .seg__btn { min-width: 0; }
+.view-pomodoro { container-type: size; }
+.ring { width: clamp(108px, calc(100cqh - 122px), 150px); height: clamp(108px, calc(100cqh - 122px), 150px); flex: none; }
+.ring__time { font-size: clamp(24px, calc((100cqh - 122px) * 0.213), 32px); }
+.langs { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#languages { flex: 1; min-height: 0; display: flex; flex-flow: column wrap; align-content: flex-start; overflow: hidden; }
+#languages > li { width: 100%; }
+.chart { height: auto; flex: 0 1 44px; min-height: 22px; }
+/* Short cards (themes with tall decorations, or the smaller hidden test window) tighten their vertical rhythm.
+   Sizes are the card's content box: classic at the real window is 390px tall and stays untouched. */
+.card { container: card / size; }
+@container card (max-height: 385px) {
+  .view { gap: 8px; }
+  .tile { padding-block: 5px; }
+  .mascot-bar { min-height: 48px; padding-top: 4px; }
+  .hint { font-size: 11px; line-height: 1.3; }
+}
+/* Very short cards only (never at the real 436px window, where the shortest is about 354px): the API-key form drops the range tabs, which do
+   nothing without a key, so its help text keeps clear of the footer. */
+@container card (max-height: 346px) {
+  #ranges:has(~ #stats-key:not([hidden])) { display: none; }
+}
+
+/* Shaped themes: slimmer tabs, and a centred picker title + Done button that stay clear of curved corners. */
+:root:not([data-skin="classic"]) .header__top { gap: 4px; }
+:root:not([data-skin="classic"]) .header__top .seg__btn { padding: 0 3px; }
+:root:not([data-skin="classic"]) .header__top .badge { padding-inline: 6px; }
+:root:not([data-skin="classic"]) .picker .section-title { text-align: center; }
+:root:not([data-skin="classic"]) #picker-close { width: auto; min-width: 55%; align-self: center; }
+
+/* ---------- Guac Star (avocado): avocado half with a stem ---------- */
+:root[data-skin="avocado"] { --pad-t: 14px; }
+:root[data-skin="avocado"] .card {
+  border: 5px solid #2f5d1e;
+  border-radius: 42% 42% 30% 30% / 22% 22% 17% 17%;
+  padding: 32px 20px 16px;
+  box-shadow: inset 0 0 0 4px #b5d86a, var(--shadow);
+  background: radial-gradient(ellipse 80% 70% at 50% 58%, #fbfcef 35%, #e4eeb8);
+}
+:root[data-skin="avocado"] .deco { display: block; }
+:root[data-skin="avocado"] .deco-a { left: 50%; top: -12px; width: 9px; height: 16px; margin-left: -4px; border-radius: 4px 4px 2px 2px; background: #6b4423; }
+:root[data-skin="avocado"] .deco-b { left: calc(50% + 4px); top: -14px; width: 20px; height: 10px; border-radius: 0 100% 0 100%; background: #8fbf4a; border: 1.5px solid #2f5d1e; transform: rotate(-18deg); }
+
+/* ---------- Pomo-dorable (tomato): squat round tomato with a leafy calyx ---------- */
+:root[data-skin="tomato"] { --pad-t: 20px; --pad-b: 8px; }
+:root[data-skin="tomato"] .card {
+  border: 3px solid var(--accent);
+  border-radius: 38% 38% 38% 38% / 18% 18% 22% 22%;
+  padding: 26px 22px 20px;
+}
+:root[data-skin="tomato"] .mascot-bar { padding-inline: 4px; }
+:root[data-skin="tomato"] .card::before { content: ""; position: absolute; left: 7px; top: 34%; width: 6px; height: 46px; border-radius: 50%; background: rgba(255, 255, 255, 0.7); pointer-events: none; }
+:root[data-skin="tomato"] .deco { display: block; }
+:root[data-skin="tomato"] .deco-a {
+  left: 50%; top: -14px; width: 74px; height: 30px; margin-left: -37px;
+  filter: drop-shadow(1px 0 0 #2e7d32) drop-shadow(-1px 0 0 #2e7d32) drop-shadow(0 1px 0 #2e7d32) drop-shadow(0 -1px 0 #2e7d32);
+}
+:root[data-skin="tomato"] .deco-a::before {
+  inset: 0; background: #5cb85c;
+  clip-path: polygon(50% 26%, 60% 0, 64% 34%, 98% 22%, 72% 54%, 90% 96%, 50% 68%, 10% 96%, 28% 54%, 2% 22%, 36% 34%, 40% 0);
+}
+:root[data-skin="tomato"] .deco-b { left: 50%; top: -20px; width: 7px; height: 14px; margin-left: -3px; border-radius: 3px; background: #2e7d32; transform: rotate(10deg); }
+
+/* ---------- Midnight Mochi (cat): head with two pointy ears ---------- */
+:root[data-skin="cat"] { --pad-t: 26px; --pad-r: 8px; --pad-l: 8px; }
+:root[data-skin="cat"] .shell {
+  filter: drop-shadow(1.5px 0 0 #5a5487) drop-shadow(-1.5px 0 0 #5a5487) drop-shadow(0 1.5px 0 #5a5487) drop-shadow(0 -1.5px 0 #5a5487)
+    drop-shadow(0 6px 6px rgba(0, 0, 0, 0.45));
+}
+:root[data-skin="cat"] .card { border-color: transparent; box-shadow: none; border-radius: 34px 34px 40px 40px / 30px 30px 46px 46px; }
+:root[data-skin="cat"] .deco { display: block; z-index: -1; top: -24px; width: 62px; height: 46px; background: var(--bg); }
+:root[data-skin="cat"] .deco-a { left: 18px; clip-path: polygon(0 100%, 20% 0, 100% 100%); }
+:root[data-skin="cat"] .deco-b { right: 18px; clip-path: polygon(0 100%, 80% 0, 100% 100%); }
+:root[data-skin="cat"] .deco::after { top: 13px; bottom: 0; background: var(--accent); opacity: 0.55; }
+:root[data-skin="cat"] .deco-a::after { left: 10px; right: 18px; clip-path: polygon(0 100%, 22% 0, 100% 100%); }
+:root[data-skin="cat"] .deco-b::after { left: 18px; right: 10px; clip-path: polygon(0 100%, 78% 0, 100% 100%); }
+
+/* ---------- Good Boy Biscuit (dog): floppy ears, collar and tag ---------- */
+:root[data-skin="dog"] { --pad-t: 8px; --pad-r: 19px; --pad-b: 14px; --pad-l: 19px; }
+:root[data-skin="dog"] .card { border-width: 2px; border-radius: 40px 40px 26px 26px; padding: 16px 12px 20px; }
+:root[data-skin="dog"] .header__top .seg__btn { font-size: 10.5px; }
+:root[data-skin="dog"] .badge { font-size: 10.5px; }
+:root[data-skin="dog"] .card::after { content: ""; position: absolute; left: 0; right: 0; bottom: 7px; height: 6px; background: #d83b3b; box-shadow: 0 1px 0 #9e2a2a; pointer-events: none; }
+:root[data-skin="dog"] .deco { display: block; z-index: -1; top: -7px; width: 42px; height: 138px; background: linear-gradient(100deg, #8a5226, #a0612f 45%, #8a5226); border: 2px solid #5a3518; border-radius: 50% 50% 46% 46% / 22% 22% 78% 78%; }
+:root[data-skin="dog"] .deco-a { left: -17px; transform: rotate(5deg); transform-origin: 80% 0; }
+:root[data-skin="dog"] .deco-b { right: -17px; transform: rotate(-5deg); transform-origin: 20% 0; }
+:root[data-skin="dog"] .shell::after { content: ""; position: absolute; left: 50%; bottom: -10px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; background: #f2c230; border: 2px solid #5a3518; pointer-events: none; }
+
+/* ---------- Neon Drone NX-16 (neon): chamfered hull with antennas ---------- */
+:root[data-skin="neon"] { --pad-t: 22px; }
+:root[data-skin="neon"] .shell {
+  filter: drop-shadow(1px 0 0 var(--accent)) drop-shadow(-1px 0 0 var(--accent)) drop-shadow(0 1px 0 var(--accent)) drop-shadow(0 -1px 0 var(--accent))
+    drop-shadow(0 0 5px rgba(63, 245, 255, 0.55));
+}
+:root[data-skin="neon"] .card {
+  border-color: transparent; box-shadow: none; border-radius: 0;
+  clip-path: polygon(26px 0, calc(100% - 10px) 0, 100% 10px, 100% 36%, calc(100% - 5px) calc(36% + 5px), calc(100% - 5px) calc(52% - 5px), 100% 52%,
+    100% calc(100% - 26px), calc(100% - 26px) 100%, 10px 100%, 0 calc(100% - 10px), 0 64%, 5px calc(64% - 5px), 5px calc(48% + 5px), 0 48%, 0 26px);
+}
+:root[data-skin="neon"] .deco { display: block; width: 2px; }
+:root[data-skin="neon"] .deco-a { right: 54px; top: -18px; height: 20px; background: var(--accent); }
+:root[data-skin="neon"] .deco-b { left: 70px; top: -11px; height: 13px; background: #8890b5; }
+:root[data-skin="neon"] .deco::after { left: 50%; top: -7px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 6px var(--accent); animation: shp-blink 1.6s steps(1) infinite; }
+:root[data-skin="neon"] .deco-b::after { width: 6px; height: 6px; margin-left: -3px; top: -5px; background: var(--ai); box-shadow: 0 0 6px var(--ai); animation-delay: -0.8s; }
+@keyframes shp-blink { 50% { opacity: 0.3; } }
+
+/* ---------- Ribbit.exe (frog): two big eye bumps ---------- */
+:root[data-skin="frog"] { --pad-t: 26px; }
+:root[data-skin="frog"] .shell {
+  filter: drop-shadow(1.5px 0 0 #2f7d32) drop-shadow(-1.5px 0 0 #2f7d32) drop-shadow(0 1.5px 0 #2f7d32) drop-shadow(0 -1.5px 0 #2f7d32)
+    drop-shadow(0 4px 0 #bfe0a3);
+}
+:root[data-skin="frog"] .card { border-color: transparent; box-shadow: none; border-radius: 40px 40px 56px 56px / 30px 30px 50px 50px; }
+:root[data-skin="frog"] .deco { display: block; z-index: -1; top: -26px; width: 62px; height: 62px; border-radius: 50%; background: var(--bg); }
+:root[data-skin="frog"] .deco-a { left: 28px; }
+:root[data-skin="frog"] .deco-b { right: 28px; }
+:root[data-skin="frog"] .deco::before {
+  left: 50%; top: 5px; width: 32px; height: 32px; margin-left: -16px; border-radius: 50%;
+  background: radial-gradient(circle at 50% 60%, #1b1b24 0 7px, transparent 7.5px), #ffffff; box-shadow: 0 0 0 2px #2f7d32;
+}
+:root[data-skin="frog"] .deco::after { left: calc(50% + 1px); top: 17px; width: 4px; height: 4px; border-radius: 50%; background: #ffffff; }
+
+/* ---------- Boo-lean (ghost): domed sheet with a scalloped hem ---------- */
+:root[data-skin="ghost"] .shell {
+  filter: drop-shadow(1px 0 0 #8f88b8) drop-shadow(-1px 0 0 #8f88b8) drop-shadow(0 1px 0 #8f88b8) drop-shadow(0 -1px 0 #8f88b8)
+    drop-shadow(0 0 6px rgba(185, 167, 255, 0.35));
+}
+:root[data-skin="ghost"] .card {
+  border-color: transparent; box-shadow: none;
+  border-radius: 46% 46% 0 0 / 62px 62px 0 0;
+  padding: 24px 20px 30px;
+  -webkit-mask: linear-gradient(#000 0 0) top / 100% calc(100% - 15px) no-repeat,
+    radial-gradient(closest-side, #000 calc(100% - 0.5px), transparent) bottom / 56px 30px round no-repeat;
+  mask: linear-gradient(#000 0 0) top / 100% calc(100% - 15px) no-repeat,
+    radial-gradient(closest-side, #000 calc(100% - 0.5px), transparent) bottom / 56px 30px round no-repeat;
+}
+:root[data-skin="ghost"] .header__top .seg__btn { font-size: 12px; }
+
+/* ---------- Shroomie (mushroom): spotted cap over a narrower stem ---------- */
+:root[data-skin="mushroom"] { --pad-t: 8px; }
+:root[data-skin="mushroom"] .shell {
+  filter: drop-shadow(1.5px 0 0 #6b4a3a) drop-shadow(-1.5px 0 0 #6b4a3a) drop-shadow(0 1.5px 0 #6b4a3a) drop-shadow(0 -1.5px 0 #6b4a3a)
+    drop-shadow(0 3px 0 #e5cdb0);
+}
+:root[data-skin="mushroom"] .card {
+  border: 0; box-shadow: none;
+  border-radius: 46% 46% 0 0 / 50px 50px 0 0;
+  padding: 24px 26px 16px;
+  background:
+    radial-gradient(circle at 34% 12px, #ffffff 0 5px, transparent 5.5px),
+    radial-gradient(circle at 54% 8px, #ffffff 0 4px, transparent 4.5px),
+    radial-gradient(circle at 70% 14px, #ffffff 0 6px, transparent 6.5px),
+    repeating-linear-gradient(90deg, #d8bc98 0 1px, transparent 1px 5px) 0 66px / 100% 7px no-repeat,
+    linear-gradient(#b8282f, #d9363e 40%, #c42f37) top / 100% 66px no-repeat,
+    var(--bg);
+  clip-path: polygon(0 0, 100% 0, 100% 58px, calc(100% - 12px) 70px, calc(100% - 12px) 100%, 12px 100%, 12px 70px, 0 58px);
+  clip-path: shape(from 0 0, hline to 100%, vline to 54px, curve to calc(100% - 12px) 70px with 100% 70px,
+    vline to calc(100% - 22px), curve to calc(100% - 34px) 100% with calc(100% - 12px) 100%,
+    hline to 34px, curve to 12px calc(100% - 22px) with 12px 100%, vline to 70px, curve to 0 54px with 0 70px, close);
+}
+:root[data-skin="mushroom"] .header { margin-inline: -14px; }
+:root[data-skin="mushroom"] .picker { background: inherit; }
+:root[data-skin="mushroom"] .picker .section-title { color: #fff6ec; }
+:root[data-skin="mushroom"] .header .icon-btn { color: #fff6ec; }
+:root[data-skin="mushroom"] .header .icon-btn:hover { background: rgba(255, 255, 255, 0.2); color: #ffffff; }
+:root[data-skin="mushroom"] .deco { display: block; bottom: 0; width: 14px; height: 12px; background: #6bbf59; clip-path: polygon(0 100%, 10% 20%, 30% 70%, 50% 0, 70% 70%, 90% 25%, 100% 100%); }
+:root[data-skin="mushroom"] .deco-a { left: 0; }
+:root[data-skin="mushroom"] .deco-b { right: 0; }
+
+/* ---------- Bubble Tea Buddy (boba): tapered cup, domed lid, straw, pearls ---------- */
+:root[data-skin="boba"] { --pad-t: 28px; --pad-r: 10px; --pad-l: 10px; }
+:root[data-skin="boba"] .shell {
+  filter: drop-shadow(1.5px 0 0 #c99a78) drop-shadow(-1.5px 0 0 #c99a78) drop-shadow(0 1.5px 0 #c99a78) drop-shadow(0 -1.5px 0 #c99a78)
+    drop-shadow(0 5px 6px rgba(194, 69, 111, 0.2));
+}
+:root[data-skin="boba"] .card {
+  border-color: transparent; box-shadow: none; border-radius: 0;
+  padding: 20px 16px 26px;
+  background:
+    radial-gradient(circle at 40% 40%, #8a5a40 0 1.5px, #3b2418 2px 4.5px, transparent 5px) center bottom 2px / 13px 10px round no-repeat,
+    radial-gradient(circle at 40% 40%, #8a5a40 0 1.5px, #3b2418 2px 4.5px, transparent 5px) center bottom 9px / 13px 10px round no-repeat,
+    var(--bg);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 18px) 100%, 18px 100%);
+  clip-path: shape(from 0 0, hline to 100%, line to calc(100% - 15px) calc(100% - 22px),
+    curve to calc(100% - 38px) 100% with calc(100% - 17px) 100%, hline to 38px, curve to 15px calc(100% - 22px) with 17px 100%, close);
+}
+:root[data-skin="boba"] .mascot-bar { padding-inline: 10px; }
+:root[data-skin="boba"] .deco { display: block; }
+/* lid: a rim a little wider than the cup (over the card's top padding) plus a low dome above the card */
+:root[data-skin="boba"] .shell::before { content: ""; position: absolute; z-index: 1; left: -5px; right: -5px; top: -2px; height: 12px; border-radius: 6px; background: #f4eef7; box-shadow: inset 0 -3px 0 #ddd0e4; pointer-events: none; }
+:root[data-skin="boba"] .deco-a { left: 22%; right: 22%; top: -9px; height: 10px; border-radius: 50% 50% 0 0 / 100% 100% 0 0; background: linear-gradient(#ffffff, #f4eef7); }
+:root[data-skin="boba"] .deco-b { z-index: -1; left: calc(50% + 16px); top: -27px; width: 15px; height: 26px; border-radius: 2px; background: #ff7aa8; box-shadow: inset -4px 0 0 #e0558a, inset 3px 0 0 #ffb3cd; transform: rotate(18deg); transform-origin: bottom center; }
+
+/* ---------- Green Screen Gary (phosphor): CRT monitor with a pixel bezel ---------- */
+:root[data-skin="phosphor"] { --pad-t: 12px; --pad-r: 12px; --pad-b: 24px; --pad-l: 12px; }
+:root[data-skin="phosphor"] .shell { filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.4)); }
+:root[data-skin="phosphor"] .card {
+  border: 0; border-radius: 26px / 34px; padding: 14px 14px 12px;
+  box-shadow: inset 0 0 0 2px #0b1a10, inset 0 0 22px rgba(0, 0, 0, 0.85), 0 0 0 3px #8a836b;
+}
+:root[data-skin="phosphor"] .header__top .seg__btn { font-size: 12px; }
+:root[data-skin="phosphor"] .deco { display: block; }
+:root[data-skin="phosphor"] .deco-a {
+  z-index: -1; inset: -12px -12px -24px -12px;
+  background: linear-gradient(#d8d1b7, #bcb49a);
+  box-shadow: inset 0 3px 0 #ece6d0, inset 0 -4px 0 #8a836b;
+  clip-path: polygon(12px 0, calc(100% - 12px) 0, calc(100% - 12px) 4px, calc(100% - 8px) 4px, calc(100% - 8px) 8px, calc(100% - 4px) 8px, calc(100% - 4px) 12px, 100% 12px,
+    100% calc(100% - 12px), calc(100% - 4px) calc(100% - 12px), calc(100% - 4px) calc(100% - 8px), calc(100% - 8px) calc(100% - 8px), calc(100% - 8px) calc(100% - 4px), calc(100% - 12px) calc(100% - 4px), calc(100% - 12px) 100%,
+    12px 100%, 12px calc(100% - 4px), 8px calc(100% - 4px), 8px calc(100% - 8px), 4px calc(100% - 8px), 4px calc(100% - 12px), 0 calc(100% - 12px),
+    0 12px, 4px 12px, 4px 8px, 8px 8px, 8px 4px, 12px 4px);
+}
+:root[data-skin="phosphor"] .deco-a::before { left: 20px; bottom: 8px; width: 48px; height: 8px; background: repeating-linear-gradient(90deg, #8a836b 0 3px, transparent 3px 6px); }
+:root[data-skin="phosphor"] .deco-a::after { content: "GREEN SCREEN"; left: 0; right: 0; bottom: 6px; text-align: center; color: #8a836b; font: 700 8px/1 var(--font); letter-spacing: 0.2em; text-shadow: 0 1px 0 #ece6d0; }
+:root[data-skin="phosphor"] .deco-b { right: 14px; bottom: -16px; width: 8px; height: 8px; background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+
+/* ---------- Pengu Pingu (penguin): plump body, belly, flippers, feet ---------- */
+:root[data-skin="penguin"] { --pad-t: 8px; --pad-r: 12px; --pad-b: 14px; --pad-l: 12px; }
+:root[data-skin="penguin"] .card {
+  border: 7px solid #1f2a44;
+  border-radius: 70px 70px 40% 40% / 56px 56px 20% 20%;
+  padding: 16px 12px 22px;
+  background: radial-gradient(ellipse 70% 55% at 50% 62%, #fbfdff, rgba(251, 253, 255, 0) 70%), var(--bg);
+}
+:root[data-skin="penguin"] .header__top .seg__btn { font-size: 12.5px; }
+:root[data-skin="penguin"] .mascot-bar { padding-inline: 10px; }
+:root[data-skin="penguin"] .deco { display: block; z-index: -1; top: 40%; width: 26px; height: 84px; border-radius: 50%; background: #1f2a44; }
+:root[data-skin="penguin"] .deco-a { left: -12px; transform: rotate(14deg); transform-origin: 50% 0; }
+:root[data-skin="penguin"] .deco-b { right: -12px; transform: rotate(-14deg); transform-origin: 50% 0; }
+:root[data-skin="penguin"] .shell::after {
+  content: ""; position: absolute; z-index: -1; left: 50%; bottom: -12px; width: 96px; height: 18px; margin-left: -48px; pointer-events: none;
+  background: radial-gradient(closest-side, #ff9f1c 90%, transparent) left / 42px 18px no-repeat, radial-gradient(closest-side, #ff9f1c 90%, transparent) right / 42px 18px no-repeat;
+}
+
+/* ---------- Jelly Deep (jelly): bell dome, frilly hem, swaying tentacles ---------- */
+:root[data-skin="jelly"] { --pad-b: 28px; }
+:root[data-skin="jelly"] .card {
+  border: 1px solid rgba(255, 154, 213, 0.45);
+  border-radius: 50% 50% 26px 26px / 68px 68px 26px 26px;
+  padding: 26px 20px 14px;
+  box-shadow: 0 0 22px rgba(159, 231, 255, 0.22), inset 0 -10px 18px rgba(255, 154, 213, 0.1);
+  background: radial-gradient(ellipse 80% 40% at 50% 0, rgba(159, 231, 255, 0.12), rgba(159, 231, 255, 0) 70%), var(--bg);
+}
+:root[data-skin="jelly"] .deco { display: block; }
+:root[data-skin="jelly"] .deco-b { left: 16px; right: 16px; top: calc(100% - 3px); height: 9px; background: radial-gradient(circle at 50% 0, rgba(255, 154, 213, 0.6) 0 5.5px, transparent 6px) 0 0 / 14px 9px round no-repeat; }
+/* Tentacles: wavy strokes in an inline SVG; they sway with a transform only (this theme has no .shell filter). */
+:root[data-skin="jelly"] .deco-a {
+  left: 50%; top: calc(100% + 2px); width: 220px; height: 26px; margin-left: -110px; transform-origin: top;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='26' fill='none' stroke-linecap='round' stroke-width='2.5'%3E%3Cg stroke='%23ff9ad5' stroke-opacity='.85'%3E%3Cpath d='M10 0q4 4 0 8t0 8t0 8'/%3E%3Cpath d='M60 0q-4 4 0 7t0 7t0 7'/%3E%3Cpath d='M110 0q4 4 0 8t0 8t0 8'/%3E%3Cpath d='M160 0q-4 4 0 7t0 7t0 7'/%3E%3Cpath d='M210 0q4 4 0 8t0 8t0 8'/%3E%3C/g%3E%3Cg stroke='%239fe7ff' stroke-opacity='.75' stroke-width='2'%3E%3Cpath d='M35 0q-3 3 0 6t0 6t0 6'/%3E%3Cpath d='M85 0q3 3 0 6t0 6'/%3E%3Cpath d='M135 0q-3 3 0 6t0 6t0 6'/%3E%3Cpath d='M185 0q3 3 0 6t0 6'/%3E%3C/g%3E%3C/svg%3E") no-repeat;
+  -webkit-mask: linear-gradient(#000 40%, transparent); mask: linear-gradient(#000 40%, transparent);
+  animation: shp-tentacle 4s ease-in-out infinite alternate;
+}
+@keyframes shp-tentacle { from { transform: skewX(-9deg); } to { transform: skewX(9deg); } }
