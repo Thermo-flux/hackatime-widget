@@ -39,12 +39,20 @@ impl SessionStore {
         Self { sessions, path: None }
     }
 
-    /// A missing or unreadable file starts an empty history.
+    /// A missing file starts an empty history. A file that exists but can't be read as sessions is
+    /// moved aside to `sessions.corrupt-<timestamp>.json` first, so it can be recovered by hand.
     pub fn load(path: PathBuf) -> Self {
-        let sessions = std::fs::read_to_string(&path)
-            .ok()
-            .and_then(|s| from_json(&s))
-            .unwrap_or_default();
+        let sessions = match std::fs::read_to_string(&path) {
+            Ok(text) => from_json(&text).unwrap_or_else(|| {
+                set_aside(&path);
+                Vec::new()
+            }),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+            Err(_) => {
+                set_aside(&path);
+                Vec::new()
+            }
+        };
         Self { sessions, path: Some(path) }
     }
 
@@ -58,10 +66,7 @@ impl SessionStore {
 
     fn save(&self) -> Result<()> {
         let Some(path) = &self.path else { return Ok(()) };
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| Error::Config(e.to_string()))?;
-        }
-        std::fs::write(path, to_json(&self.sessions)?).map_err(|e| Error::Config(format!("{}: {e}", path.display())))
+        crate::fsutil::write_atomic(path, to_json(&self.sessions)?.as_bytes())
     }
 
     /// Starts a session; if one is already running it is left alone.
@@ -86,6 +91,12 @@ impl SessionStore {
         self.save()?;
         Ok(kept)
     }
+}
+
+/// Renames an unreadable sessions file out of the way (best effort).
+fn set_aside(path: &std::path::Path) {
+    let stamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
+    let _ = std::fs::rename(path, path.with_file_name(format!("sessions.corrupt-{stamp}.json")));
 }
 
 pub fn to_json(sessions: &[Session]) -> Result<String> {
@@ -229,6 +240,46 @@ mod tests {
     /// 2026-10-21 00:00:00 UTC.
     const DAY0: i64 = 1_792_540_800;
     const D: i64 = 86_400;
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("hackatime-widget-test-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn a_corrupt_file_is_moved_aside_and_the_store_starts_empty() {
+        let dir = temp_dir("corrupt");
+        let path = dir.join("sessions.json");
+        std::fs::write(&path, "{\"sessions\": [ {\"id\": 1, \"sta").unwrap();
+        let store = SessionStore::load(path.clone());
+        assert!(store.sessions().is_empty());
+        assert!(!path.exists());
+        let moved: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.starts_with("sessions.corrupt-") && n.ends_with(".json"))
+            .collect();
+        assert_eq!(moved.len(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_missing_file_starts_empty_and_a_saved_store_round_trips() {
+        let dir = temp_dir("roundtrip");
+        let path = dir.join("sessions.json");
+        let mut store = SessionStore::load(path.clone());
+        assert!(store.sessions().is_empty());
+        store.start(DAY0).unwrap();
+        assert!(store.stop(DAY0 + 600).unwrap());
+        let back = SessionStore::load(path);
+        assert_eq!(back.sessions(), &[Session { id: 1, start: DAY0, end: Some(DAY0 + 600) }]);
+        let leftovers = std::fs::read_dir(&dir).unwrap().count();
+        assert_eq!(leftovers, 1); // no .tmp or .corrupt files
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     fn done(id: u64, start: i64, mins: i64) -> Session {
         Session { id, start, end: Some(start + mins * 60) }

@@ -7,6 +7,7 @@ mod api;
 mod app;
 mod config;
 mod error;
+mod fsutil;
 mod pomodoro;
 mod sessions;
 mod stats;

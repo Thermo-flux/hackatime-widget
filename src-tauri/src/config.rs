@@ -186,12 +186,8 @@ pub fn load() -> Config {
 }
 
 pub fn save(cfg: &Config) -> Result<()> {
-    let path = config_path();
     let json = serde_json::to_string_pretty(cfg).map_err(|e| Error::Config(e.to_string()))?;
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| Error::Config(e.to_string()))?;
-    }
-    std::fs::write(&path, json).map_err(|e| Error::Config(format!("{}: {e}", path.display())))
+    crate::fsutil::write_atomic(&config_path(), json.as_bytes())
 }
 
 #[cfg(test)]
