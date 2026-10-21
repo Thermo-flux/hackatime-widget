@@ -50,6 +50,9 @@ pub struct Stats {
     pub mock: bool,
     /// False when the AI share couldn't be fetched, so the UI shows "unknown" instead of 0%.
     pub ai_available: bool,
+    /// Total of the equally long period right before this one; `None` for All time or when that
+    /// request failed, so the UI shows no comparison rather than a wrong one.
+    pub previous_total_seconds: Option<f64>,
 }
 
 impl Stats {
@@ -66,6 +69,7 @@ impl Stats {
             projects,
             mock: false,
             ai_available: ai.is_some(),
+            previous_total_seconds: None,
         }
     }
 }
@@ -117,6 +121,7 @@ pub fn aggregate(resp: SummariesResponse) -> Stats {
         projects: merge(&days, |d| &d.projects),
         mock: false,
         ai_available: true,
+        previous_total_seconds: None,
     }
 }
 

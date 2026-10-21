@@ -47,6 +47,35 @@ function renderList() {
   );
 }
 
+const PERIODS = {
+  today: { label: "today", before: "yesterday", prev: "Yesterday" },
+  "7d": { label: "last 7 days", before: "previous 7", prev: "Previous 7 days" },
+  "30d": { label: "last 30 days", before: "previous 30", prev: "Previous 30 days" },
+};
+
+/** The muted line under the total: how this period compares with the one before it. No red for less. */
+function renderContext(s) {
+  const p = PERIODS[range];
+  const line = $("total-context");
+  const prev = s.previous_total_seconds;
+  if (!p || prev == null || (prev <= 0 && s.total_seconds <= 0)) {
+    line.hidden = true;
+    return;
+  }
+  line.hidden = false;
+  if (s.total_seconds <= 0) {
+    line.textContent = `${p.prev}: ${fmt(prev)}`;
+    return;
+  }
+  const diff = s.total_seconds - prev;
+  if (Math.abs(diff) < 60) {
+    line.textContent = `${p.label} · same as ${p.before}`;
+    return;
+  }
+  const delta = el("span", { class: diff > 0 ? "total-context__up" : "", text: `${diff > 0 ? "↑" : "↓"} ${fmt(Math.abs(diff))}` });
+  line.replaceChildren(`${p.label} · `, delta, ` vs ${p.before}`);
+}
+
 function render(s) {
   const total = s.total_seconds;
   const known = s.ai_available !== false; // false: the AI figure couldn't be fetched
@@ -54,6 +83,7 @@ function render(s) {
   const human = total > 0 ? 100 - ai : 0;
   const unknown = !known && total > 0; // can't split the bar without the AI figure, so don't claim 100% human
   $("total").textContent = fmt(total);
+  renderContext(s);
   const zero = total <= 0; // nothing to chart: say so once instead of showing empty parts
   $("zero-note").hidden = !zero;
   $("stat-bar").hidden = zero;

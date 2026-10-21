@@ -7,6 +7,8 @@
 .view { display: flex; flex-direction: column; gap: var(--space-3); flex: 1; min-height: 0; }
 
 .total { font-size: var(--fs-xl); font-weight: var(--fw-bold); line-height: 1.1; }
+.total-context { margin: 2px 0 0; color: var(--muted); font-size: var(--fs-xs); }
+.total-context__up { color: var(--human); font-weight: var(--fw-bold); }
 .view[aria-busy="true"] .total,
 .view[aria-busy="true"] .legend,
 .view[aria-busy="true"] .langs { opacity: 0.5; }

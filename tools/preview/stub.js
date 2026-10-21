@@ -9,12 +9,12 @@
   const LANGS = [slice("Rust", 2.5 * H), slice("TypeScript", 1.8 * H), slice("CSS", 1.2 * H), slice("Markdown", 0.5 * H)];
   const PROJECTS = [slice("hackatime-widget", 3.4 * H), slice("portfolio-site", 1.9 * H), slice("dotfiles", 0.7 * H)];
 
-  function stats(total, ai, { languages = LANGS, projects = PROJECTS, aiAvailable = true, mock = false } = {}) {
+  function stats(total, ai, { languages = LANGS, projects = PROJECTS, aiAvailable = true, mock = false, prev = null } = {}) {
     const aiSecs = aiAvailable ? ai : 0;
     return {
       total_seconds: total, ai_seconds: aiSecs, human_seconds: total - aiSecs,
       ai_percent: total > 0 ? (aiSecs / total) * 100 : 0,
-      categories: [], languages, projects, mock, ai_available: aiAvailable,
+      categories: [], languages, projects, mock, ai_available: aiAvailable, previous_total_seconds: prev,
     };
   }
 
@@ -22,14 +22,15 @@
   const statsFor = (range) => {
     const k = RANGE_SCALE[range] ?? 1;
     switch (scenario) {
-      case "zero": return stats(0, 0, { languages: [], projects: [] });
+      case "zero": return stats(0, 0, { languages: [], projects: [], prev: 4.2 * H * k });
+      case "down": return stats(6.25 * H * k, 2.25 * H * k, { prev: 9.5 * H * k });
       case "ai_unavailable": return stats(6.25 * H * k, 0, { aiAvailable: false });
       case "huge": return stats((999 * H + 59 * 60 + 412 * H), 412 * H, {
         languages: [slice("TypeScript React (TSX)", 300 * H), slice("Jupyter Notebook (Python)", 200 * H), slice("C++ (Objective)", 90 * H), slice("Markdown", 30 * H)],
         projects: [slice("a-very-long-project-name-for-testing", 500 * H), slice("monorepo/apps/web-dashboard", 300 * H), slice("dotfiles", 100 * H)],
       });
       case "mock": return stats(6.25 * H * k, 2.25 * H * k, { mock: true });
-      default: return stats(6.25 * H * k, 2.25 * H * k);
+      default: return stats(6.25 * H * k, 2.25 * H * k, { prev: range === "all" ? null : 5.1 * H * k });
     }
   };
 
