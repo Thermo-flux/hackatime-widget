@@ -97,7 +97,7 @@ outside the shape.
 | "Connect your Hackatime account" | No key found. Paste it, or run Hackatime's setup so `.wakatime.cfg` exists. |
 | "Hackatime rejected that key" | Wrong or revoked key (HTTP 401/403). Copy it again from the setup page. |
 | "Can't reach Hackatime" | Network down, or `base_url` is wrong. Press Retry. |
-| `AI –` in Stats | The AI figure couldn't be fetched; the rest still works. |
+| Grey bar and "AI share unavailable" in Stats | The AI figure couldn't be fetched; the rest still works. |
 | "Coding activity unavailable" in a session | Heartbeats couldn't be fetched; the clock and history still work. |
 | Hover the red message | Full technical detail is in the tooltip. |
 
@@ -116,7 +116,7 @@ and `languages`, and is capped at 366 days.
 **Verification status.** `tools/probe-hackatime.mjs` prints the category names the live API uses (run it with `HACKATIME_KEY=<key>`); it still has to be run against the live service, and `AI_CATEGORY` is unconfirmed until then. Request shapes and error handling are tested against a local fake that follows the
 swagger spec (`tools/fake-hackatime.mjs`). It has **not** yet been run against the live service, so the
 exact `filter_by_category` spelling (`ai coding`) and the heartbeat fields are the first things to confirm
-with a real key. If the AI call fails the widget degrades to "AI –" rather than showing wrong numbers.
+with a real key. If the AI call fails the widget shows a neutral bar and "AI share unavailable" rather than wrong numbers.
 
 ## Build from source
 Prerequisites: [Rust](https://rustup.rs) and the [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/)
