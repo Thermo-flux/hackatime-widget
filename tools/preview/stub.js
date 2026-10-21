@@ -66,8 +66,7 @@
   };
 
   const config = () => ({
-    api_key: scenario === "no_key" ? "" : "stub-key", base_url: "https://hackatime.hackclub.com/api/hackatime/v1",
-    refresh_secs: 300, mock: scenario === "mock",
+    has_key: scenario !== "no_key", refresh_secs: 300, mock: scenario === "mock",
     pomodoro: { ...POMO, long_break_every: 4, auto_start: false },
   });
 
@@ -78,7 +77,7 @@
       ? { fetched_at: cachedAt(), stale: true, stats: statsFor(a?.range) }
       : null,
     get_config: config,
-    set_config: () => null,
+    set_api_key: () => null,
     set_pomodoro: (a) => { const p = { ...pomo(), ...a.lengths }; const idle = p.remaining_secs >= p.total_secs; const t = (p.phase === "focus" ? p.focus_min : p.phase === "short_break" ? p.short_break_min : p.long_break_min) * 60; return idle ? { ...p, total_secs: t, remaining_secs: t } : p; },
     quit: () => null,
     get_stats: (a) => {

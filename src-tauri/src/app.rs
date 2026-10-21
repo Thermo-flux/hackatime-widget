@@ -1,7 +1,7 @@
 //! Tauri glue: commands and the app builder. Compiled only for the real app, because
 //! linking Tauri's UI code into unit-test binaries fails on Windows (no comctl32 v6 manifest).
 
-use crate::config::{self, Config, PomodoroLengths};
+use crate::config::{self, ConfigView, PomodoroLengths};
 use crate::error::Result;
 use crate::pomodoro::{Pomodoro, Snapshot};
 use crate::sessions::{self, SessionStore, Summary};
@@ -98,17 +98,18 @@ fn get_cached_stats(range: String) -> Option<CachedStats> {
     Some(CachedStats { fetched_at: entry.fetched_at, stale: cache::is_stale(&entry, now), stats: entry.stats })
 }
 
-/// What's saved on disk; a key picked up from `.wakatime.cfg` is used but never copied into it.
+/// What the UI may see of the config. The key and server URL never leave Rust.
 #[tauri::command]
-fn get_config() -> Config {
-    config::load_file()
+fn get_config() -> ConfigView {
+    (&config::load()).into()
 }
 
+/// Checks the key's shape before saving it, so a typo never costs a network call.
 #[tauri::command]
-fn set_config(timer: State<Timer>, cfg: Config) -> Result<()> {
-    config::save(&cfg)?;
-    // A started timer keeps its time (saving the API key mustn't reset a running Pomodoro).
-    timer.0.lock().unwrap().set_config(cfg.pomodoro);
+fn set_api_key(key: String) -> Result<()> {
+    config::save_api_key(&key)?;
+    // Saved stats belong to the previous account.
+    let _ = std::fs::remove_file(config::data_path("stats-cache.json"));
     Ok(())
 }
 
@@ -188,7 +189,7 @@ pub fn run() {
             get_stats,
             get_cached_stats,
             get_config,
-            set_config,
+            set_api_key,
             set_pomodoro,
             quit,
             session_state,

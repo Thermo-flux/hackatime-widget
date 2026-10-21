@@ -139,6 +139,43 @@ fn parse(text: &str) -> Option<Config> {
     Some(cfg)
 }
 
+/// What the webview may know about the config: never the key, never the server URL.
+#[derive(Debug, Clone, Serialize)]
+pub struct ConfigView {
+    pub has_key: bool,
+    pub refresh_secs: u64,
+    pub mock: bool,
+    pub pomodoro: PomodoroConfig,
+}
+
+impl From<&Config> for ConfigView {
+    fn from(c: &Config) -> Self {
+        Self { has_key: !c.api_key.trim().is_empty(), refresh_secs: c.refresh_secs, mock: c.mock, pomodoro: c.pomodoro.clone() }
+    }
+}
+
+/// A Hackatime key is a UUID (8-4-4-4-12 hex digits). Returns it trimmed.
+pub fn validate_api_key(key: &str) -> Result<String> {
+    let key = key.trim();
+    let groups: Vec<&str> = key.split('-').collect();
+    let shaped = groups.len() == 5
+        && groups.iter().zip([8, 4, 4, 4, 12]).all(|(g, n)| g.len() == n && g.chars().all(|c| c.is_ascii_hexdigit()));
+    if shaped { Ok(key.to_string()) } else { Err(Error::InvalidKey) }
+}
+
+impl Config {
+    /// This config with a new, validated API key; everything else is kept.
+    pub fn with_api_key(mut self, key: &str) -> Result<Self> {
+        self.api_key = validate_api_key(key)?;
+        Ok(self)
+    }
+}
+
+/// Saves a new API key: re-reads the file so nothing else in it is lost.
+pub fn save_api_key(key: &str) -> Result<()> {
+    save(&load_file().with_api_key(key)?)
+}
+
 /// The three lengths the settings UI edits, in minutes.
 #[derive(Debug, Clone, Copy, Deserialize)]
 pub struct PomodoroLengths {

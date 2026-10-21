@@ -9,6 +9,8 @@ pub enum Error {
     Http(#[from] reqwest::Error),
     #[error("server returned {0}")]
     Status(u16),
+    #[error("That doesn't look like a Hackatime key")]
+    InvalidKey,
     #[error("config error: {0}")]
     Config(String),
 }
@@ -21,6 +23,7 @@ impl Error {
             Error::Status(401 | 403) => "unauthorized",
             Error::Http(_) => "network",
             Error::Status(_) => "server",
+            Error::InvalidKey => "invalid_key",
             Error::Config(_) => "config",
         }
     }

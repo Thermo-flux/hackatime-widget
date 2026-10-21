@@ -185,9 +185,7 @@ export function init() {
     const save = $("save");
     save.disabled = true;
     try {
-      const cfg = await invoke("get_config");
-      cfg.api_key = $("key").value.trim();
-      await invoke("set_config", { cfg });
+      await invoke("set_api_key", { key: $("key").value });
       $("key").value = "";
       await refresh();
     } catch (err) {
