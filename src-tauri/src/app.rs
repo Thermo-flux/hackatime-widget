@@ -18,6 +18,9 @@ struct Timer(Mutex<Pomodoro>);
 
 struct Sessions(Mutex<SessionStore>);
 
+/// Heartbeats already downloaded for the running session (see `activity::poll`).
+struct Heartbeats(Mutex<activity::HeartbeatCache>);
+
 fn local_offset() -> FixedOffset {
     FixedOffset::east_opt(Local::now().offset().local_minus_utc()).unwrap_or(FixedOffset::east_opt(0).unwrap())
 }
@@ -38,7 +41,7 @@ struct SessionView {
 }
 
 #[tauri::command]
-async fn session_state(store: State<'_, Sessions>) -> Result<SessionView> {
+async fn session_state(store: State<'_, Sessions>, beats: State<'_, Heartbeats>) -> Result<SessionView> {
     let (now, tz) = (Utc::now().timestamp(), local_offset());
     // Read what we need and release the lock before any network await.
     let (start, summary) = {
@@ -48,7 +51,7 @@ async fn session_state(store: State<'_, Sessions>) -> Result<SessionView> {
     let active = match start {
         None => None,
         Some(start) => {
-            let (activity, activity_error) = match activity::for_session(&config::load(), start, now).await {
+            let (activity, activity_error) = match activity::for_session(&config::load(), &beats.0, start, now).await {
                 Ok(a) => (Some(a), None),
                 Err(e) => (None, Some(e.to_string())),
             };
@@ -59,13 +62,15 @@ async fn session_state(store: State<'_, Sessions>) -> Result<SessionView> {
 }
 
 #[tauri::command]
-fn session_start(store: State<Sessions>) -> Result<()> {
+fn session_start(store: State<Sessions>, beats: State<Heartbeats>) -> Result<()> {
+    beats.0.lock().unwrap().clear();
     store.0.lock().unwrap().start(Utc::now().timestamp())
 }
 
 /// Returns false when the session was too short to keep.
 #[tauri::command]
-fn session_stop(store: State<Sessions>) -> Result<bool> {
+fn session_stop(store: State<Sessions>, beats: State<Heartbeats>) -> Result<bool> {
+    beats.0.lock().unwrap().clear();
     store.0.lock().unwrap().stop(Utc::now().timestamp())
 }
 
@@ -173,6 +178,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(Timer(Mutex::new(Pomodoro::new(cfg.pomodoro))))
         .manage(Sessions(Mutex::new(store)))
+        .manage(Heartbeats(Mutex::new(activity::HeartbeatCache::default())))
         .setup(|app| {
             // Keep WebView2/WebKit data beside the config instead of in the OS app-data dir.
             let data_dir = config::data_path("webview-data");

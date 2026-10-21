@@ -4,6 +4,8 @@ use crate::error::Result;
 use crate::stats::is_ai;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::future::Future;
+use std::sync::Mutex;
 
 /// WakaTime's rule: heartbeats closer together than this count as continuous work.
 pub const TIMEOUT_SECS: f64 = 120.0;
@@ -97,10 +99,63 @@ pub fn mock_heartbeats(from: f64, to: f64) -> Vec<Heartbeat> {
     out
 }
 
-pub async fn for_session(cfg: &Config, start: i64, now: i64) -> Result<Live> {
-    let (from, to) = (start as f64, now as f64);
-    let hbs = if cfg.mock { mock_heartbeats(from, to) } else { api::fetch_heartbeats(cfg, start, now).await? };
-    Ok(measure(&hbs, from, to))
+/// Each poll re-fetches this much before the last fetch's end, so a gap that straddles the
+/// boundary (a heartbeat just before it, the next just after) is still measured.
+pub const OVERLAP_SECS: i64 = 150;
+
+/// Heartbeats already downloaded for the running session, so a poll only asks for what's new.
+#[derive(Debug, Default)]
+pub struct HeartbeatCache {
+    session_start: i64,
+    /// Unix seconds the last successful fetch ran up to; 0 means nothing is cached.
+    fetched_until: i64,
+    hbs: Vec<Heartbeat>,
+}
+
+impl HeartbeatCache {
+    pub fn clear(&mut self) {
+        *self = Self::default();
+    }
+
+    /// Where the next fetch for the session starting at `start` should begin. A different session
+    /// than the cached one starts over.
+    fn fetch_from(&mut self, start: i64) -> i64 {
+        if self.session_start != start || self.fetched_until == 0 {
+            self.clear();
+            self.session_start = start;
+            return start;
+        }
+        (self.fetched_until - OVERLAP_SECS).max(start)
+    }
+
+    /// Adds a fetched chunk, dropping heartbeats already held (same `time`), and keeps the list sorted.
+    fn merge(&mut self, chunk: Vec<Heartbeat>, until: i64) {
+        let mut seen: std::collections::HashSet<u64> = self.hbs.iter().map(|h| h.time.to_bits()).collect();
+        self.hbs.extend(chunk.into_iter().filter(|h| seen.insert(h.time.to_bits())));
+        self.hbs.sort_by(|a, b| a.time.total_cmp(&b.time));
+        self.fetched_until = self.fetched_until.max(until);
+    }
+}
+
+/// Live activity for the session that began at `start`, fetching through `fetch(from, to)` only the
+/// heartbeats not already cached. The lock is never held while `fetch` runs.
+pub async fn poll<F, Fut>(cache: &Mutex<HeartbeatCache>, start: i64, now: i64, fetch: F) -> Result<Live>
+where
+    F: FnOnce(i64, i64) -> Fut,
+    Fut: Future<Output = Result<Vec<Heartbeat>>>,
+{
+    let from = cache.lock().unwrap().fetch_from(start);
+    let chunk = fetch(from, now).await?;
+    let mut c = cache.lock().unwrap();
+    c.merge(chunk, now);
+    Ok(measure(&c.hbs, start as f64, now as f64))
+}
+
+pub async fn for_session(cfg: &Config, cache: &Mutex<HeartbeatCache>, start: i64, now: i64) -> Result<Live> {
+    if cfg.mock {
+        return Ok(measure(&mock_heartbeats(start as f64, now as f64), start as f64, now as f64));
+    }
+    poll(cache, start, now, |from, to| api::fetch_heartbeats(cfg, from, to)).await
 }
 
 #[cfg(test)]
@@ -179,5 +234,97 @@ mod tests {
     fn hackatime_category_spelling_counts_as_ai() {
         let l = measure(&[hb(0.0, "ai coding"), hb(60.0, "coding"), hb(120.0, "coding")], 0.0, 200.0);
         assert_eq!(l.ai_secs, 60.0);
+    }
+
+    // ---- incremental polling ----
+
+    type Log = Mutex<Vec<(i64, i64)>>;
+
+    /// A fake server holding `all` heartbeats; records the (from, to) of every request.
+    fn fake<'a>(all: &'a [Heartbeat], log: &'a Log) -> impl FnOnce(i64, i64) -> std::future::Ready<Result<Vec<Heartbeat>>> + 'a {
+        move |from, to| {
+            log.lock().unwrap().push((from, to));
+            std::future::ready(Ok(all.iter().filter(|h| h.time >= from as f64 && h.time <= to as f64).cloned().collect()))
+        }
+    }
+
+    /// One heartbeat a minute for four hours, with a 5-minute hole at 1h.
+    fn four_hours() -> Vec<Heartbeat> {
+        (0..=240)
+            .filter(|m| !(60..65).contains(m))
+            .map(|m| hb(m as f64 * 60.0, if m % 5 == 0 { "AI Coding" } else { "Coding" }))
+            .collect()
+    }
+
+    /// Runs a future to completion; these futures are always immediately ready.
+    fn ready<T>(fut: impl Future<Output = T>) -> T {
+        let mut fut = std::pin::pin!(fut);
+        let mut cx = std::task::Context::from_waker(std::task::Waker::noop());
+        match fut.as_mut().poll(&mut cx) {
+            std::task::Poll::Ready(v) => v,
+            std::task::Poll::Pending => panic!("future was not ready"),
+        }
+    }
+
+    #[test]
+    fn merge_drops_duplicates_and_keeps_order() {
+        let mut c = HeartbeatCache::default();
+        c.merge(vec![hb(60.0, "Coding"), hb(0.0, "Coding")], 100);
+        c.merge(vec![hb(60.0, "Coding"), hb(120.0, "Coding")], 200);
+        let times: Vec<f64> = c.hbs.iter().map(|h| h.time).collect();
+        assert_eq!(times, vec![0.0, 60.0, 120.0]);
+        assert_eq!(c.fetched_until, 200);
+        c.merge(vec![], 150); // never moves backwards
+        assert_eq!(c.fetched_until, 200);
+    }
+
+    #[test]
+    fn the_first_poll_fetches_everything_and_later_ones_only_the_tail() {
+        let (cache, log, all) = (Mutex::new(HeartbeatCache::default()), Mutex::new(Vec::new()), four_hours());
+        for now in [600, 630, 14_400] {
+            ready(poll(&cache, 0, now, fake(&all, &log))).unwrap();
+        }
+        let log = log.lock().unwrap();
+        assert_eq!(log[0], (0, 600));
+        assert_eq!(log[1], (600 - OVERLAP_SECS, 630)); // a small request, with the overlap
+        assert_eq!(log[2], (630 - OVERLAP_SECS, 14_400));
+    }
+
+    #[test]
+    fn chunked_polling_measures_the_same_as_one_fetch() {
+        let (cache, log, all) = (Mutex::new(HeartbeatCache::default()), Mutex::new(Vec::new()), four_hours());
+        let mut last = None;
+        // Poll every 30 s through the session, including polls that land inside the 5-minute hole.
+        for now in (30..=14_400).step_by(30) {
+            last = Some(ready(poll(&cache, 0, now, fake(&all, &log))).unwrap());
+        }
+        assert_eq!(last.unwrap(), measure(&all, 0.0, 14_400.0));
+        // Every request after the first stays small.
+        assert!(log.lock().unwrap().iter().skip(1).all(|(f, t)| t - f <= OVERLAP_SECS + 30));
+    }
+
+    #[test]
+    fn a_gap_straddling_a_boundary_is_measured() {
+        // Heartbeats at 100 and 190; polls at 150 and 200. The first poll only sees the one at 100.
+        let (cache, log) = (Mutex::new(HeartbeatCache::default()), Mutex::new(Vec::new()));
+        let all = vec![hb(100.0, "Coding"), hb(190.0, "Coding")];
+        ready(poll(&cache, 0, 150, fake(&all, &log))).unwrap();
+        let live = ready(poll(&cache, 0, 200, fake(&all, &log))).unwrap();
+        assert_eq!(live.active_secs, 90.0);
+    }
+
+    #[test]
+    fn a_new_session_or_a_clear_starts_over_and_a_failed_fetch_changes_nothing() {
+        let (cache, log, all) = (Mutex::new(HeartbeatCache::default()), Mutex::new(Vec::new()), four_hours());
+        ready(poll(&cache, 0, 600, fake(&all, &log))).unwrap();
+        ready(poll(&cache, 1_000, 1_200, fake(&all, &log))).unwrap(); // a different session
+        assert_eq!(log.lock().unwrap()[1], (1_000, 1_200));
+        cache.lock().unwrap().clear();
+        ready(poll(&cache, 1_000, 1_300, fake(&all, &log))).unwrap();
+        assert_eq!(log.lock().unwrap()[2], (1_000, 1_300));
+        let before = cache.lock().unwrap().fetched_until;
+        let failed = ready(poll(&cache, 1_000, 1_400, |_, _| std::future::ready(Err(crate::error::Error::Status(500)))));
+        assert!(failed.is_err());
+        assert_eq!(cache.lock().unwrap().fetched_until, before);
     }
 }
