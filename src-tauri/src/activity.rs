@@ -158,7 +158,7 @@ impl HeartbeatCache {
     fn merge(&mut self, chunk: Vec<Heartbeat>, until: i64, from: i64) {
         let held: std::collections::HashSet<Identity> =
             self.hbs.iter().filter(|h| h.time >= from as f64).map(identity).collect();
-        self.hbs.extend(chunk.into_iter().filter(|h| !held.contains(&identity(h))));
+        self.hbs.extend(chunk.into_iter().filter(|h| h.time >= from as f64 && !held.contains(&identity(h))));
         self.hbs.sort_by(|a, b| a.time.total_cmp(&b.time));
         self.fetched_until = self.fetched_until.max(until);
     }

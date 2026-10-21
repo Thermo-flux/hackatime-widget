@@ -49,6 +49,9 @@ pub fn is_stale(entry: &Entry, now: i64) -> bool {
 
 /// Stores a fresh result for `range` in the cache file (read-modify-write, best effort for the caller).
 pub fn store(path: &Path, range: &str, stats: &Stats, now: i64) -> Result<()> {
+    // One writer at a time: concurrent refreshes would otherwise drop each other's range.
+    static WRITE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = WRITE.lock().unwrap_or_else(|e| e.into_inner());
     let mut cache = StatsCache::load(path);
     cache.put(range, stats.clone(), now);
     cache.save(path)

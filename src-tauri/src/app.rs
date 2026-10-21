@@ -77,10 +77,11 @@ fn session_stop(store: State<Sessions>, beats: State<Heartbeats>) -> Result<bool
 #[tauri::command]
 async fn get_stats(range: String) -> Result<Stats> {
     let cfg = config::load();
-    let stats = api::fetch_stats(&cfg, api::Range::parse(&range)).await?;
+    let range = api::Range::parse(&range);
+    let stats = api::fetch_stats(&cfg, range).await?;
     if !cfg.mock {
         // The cache is a convenience: failing to write it must not fail the refresh.
-        let _ = cache::store(&config::data_path("stats-cache.json"), &range, &stats, Utc::now().timestamp());
+        let _ = cache::store(&config::data_path("stats-cache.json"), range.name(), &stats, Utc::now().timestamp());
     }
     Ok(stats)
 }
@@ -99,7 +100,7 @@ fn get_cached_stats(range: String) -> Option<CachedStats> {
         return None;
     }
     let now = Utc::now().timestamp();
-    let entry = cache::StatsCache::load(&config::data_path("stats-cache.json")).get(&range)?.clone();
+    let entry = cache::StatsCache::load(&config::data_path("stats-cache.json")).get(api::Range::parse(&range).name())?.clone();
     Some(CachedStats { fetched_at: entry.fetched_at, stale: cache::is_stale(&entry, now), stats: entry.stats })
 }
 

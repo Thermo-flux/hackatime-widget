@@ -64,14 +64,16 @@ const BACKOFF_SECS = [30, 60, 120, 300]; // then the normal interval takes over
 let retryTimer = null;
 let tickTimer = null;
 let failures = 0;
+let paused = false; // the window is hidden: no timers may be (re)armed
 let shown = null; // { range, fetchedAt } for the data on screen, if any
 
 const nowSecs = () => Math.floor(Date.now() / 1000);
 
-function setStale(on) {
+/** Dim the data; `banner` also shows the "Offline · showing 14:02" strip. */
+function setStale(on, banner = on) {
   $("stats-ok").classList.toggle("is-stale", on);
-  $("stale-banner").hidden = !on || !shown;
-  if (on && shown) {
+  $("stale-banner").hidden = !banner || !shown;
+  if (banner && shown) {
     $("stale-text").textContent = `${offlineKind} · showing ${clock(shown.fetchedAt)}`;
   }
 }
@@ -94,7 +96,7 @@ async function showCached(forRange) {
     const c = await invoke("get_cached_stats", { range: forRange });
     if (!c || forRange !== range) return false;
     showData(c.stats, c.fetched_at, forRange);
-    setStale(false);
+    setStale(c.stale, false); // an old copy stays dimmed until fresh data replaces it
     return true;
   } catch {
     return false;
@@ -104,7 +106,7 @@ async function showCached(forRange) {
 function scheduleRetry() {
   clearTimeout(retryTimer);
   const delay = BACKOFF_SECS[failures - 1];
-  if (delay) retryTimer = setTimeout(refresh, delay * 1000);
+  if (delay && !paused) retryTimer = setTimeout(refresh, delay * 1000);
 }
 
 export async function refresh() {
@@ -127,6 +129,7 @@ export async function refresh() {
     signal("offline", e.code === "network");
     signal("error", e.code === "server");
     if (needsKey) {
+      failures = 0;
       shown = null;
       signal("empty", false);
       $("key-msg").textContent =
@@ -137,7 +140,11 @@ export async function refresh() {
     failures += 1;
     scheduleRetry();
     // Keep whatever we have for this range: what's on screen, else the saved copy.
-    const haveData = (shown && shown.range === asked) || (await showCached(asked));
+    let haveData = shown && shown.range === asked;
+    if (!haveData) {
+      haveData = await showCached(asked);
+      if (asked !== range) return; // switched ranges while reading the saved copy
+    }
     if (haveData) {
       offlineKind = e.code === "network" ? "Offline" : "Can't refresh";
       show("ok");
@@ -156,12 +163,15 @@ export async function refresh() {
 async function schedule() {
   clearInterval(timer);
   const cfg = await invoke("get_config");
+  if (paused) return;
   timer = setInterval(refresh, Math.max(30, cfg.refresh_secs) * 1000);
 }
 
 /** Stop background refreshing while the window is hidden. */
-export function pause() { clearInterval(timer); clearInterval(tickTimer); clearTimeout(retryTimer); timer = null; }
+export function pause() { paused = true; clearInterval(timer); clearInterval(tickTimer); clearTimeout(retryTimer); timer = null; }
 export function resume() {
+  paused = false;
+  failures = 0;
   showCached(range).then(() => refresh());
   schedule();
   clearInterval(tickTimer);
@@ -174,11 +184,13 @@ export function init() {
     if (!btn) return;
     range = btn.dataset.range;
     document.querySelectorAll("#ranges .seg__btn").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+    failures = 0;
     showCached(range).then(() => refresh());
   });
 
-  $("stale-retry").addEventListener("click", refresh);
-  $("retry").addEventListener("click", refresh);
+  const retryNow = () => { failures = 0; refresh(); };
+  $("stale-retry").addEventListener("click", retryNow);
+  $("retry").addEventListener("click", retryNow);
 
   $("stats-key").addEventListener("submit", async (e) => {
     e.preventDefault();

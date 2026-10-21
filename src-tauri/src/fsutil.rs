@@ -1,10 +1,13 @@
 use crate::error::{Error, Result};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
+/// A temp name unique to this write, so two writers to the same file never share one.
 fn tmp_path(path: &Path) -> PathBuf {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
     let mut name = path.file_name().map(|n| n.to_os_string()).unwrap_or_default();
-    name.push(".tmp");
+    name.push(format!(".{}.{}.tmp", std::process::id(), COUNTER.fetch_add(1, Ordering::Relaxed)));
     path.with_file_name(name)
 }
 
@@ -47,7 +50,7 @@ mod tests {
         write_atomic(&path, b"one").unwrap();
         write_atomic(&path, b"two").unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "two");
-        assert!(!dir.join("data.json.tmp").exists());
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1); // no temp files left behind
         let _ = std::fs::remove_dir_all(&dir);
     }
 

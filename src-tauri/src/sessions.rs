@@ -39,21 +39,22 @@ impl SessionStore {
         Self { sessions, path: None }
     }
 
-    /// A missing file starts an empty history. A file that exists but can't be read as sessions is
-    /// moved aside to `sessions.corrupt-<timestamp>.json` first, so it can be recovered by hand.
+    /// A missing file starts an empty history. A file that parses badly is moved aside to
+    /// `sessions.corrupt-<timestamp>.json` first, so it can be recovered by hand. A file that can't be
+    /// read at all (locked by a sync tool, say) is left alone: this run keeps its history in memory
+    /// rather than risk overwriting it.
     pub fn load(path: PathBuf) -> Self {
-        let sessions = match std::fs::read_to_string(&path) {
-            Ok(text) => from_json(&text).unwrap_or_else(|| {
-                set_aside(&path);
-                Vec::new()
-            }),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
-            Err(_) => {
-                set_aside(&path);
-                Vec::new()
+        match std::fs::read_to_string(&path) {
+            Ok(text) => {
+                let sessions = from_json(&text).unwrap_or_else(|| {
+                    set_aside(&path);
+                    Vec::new()
+                });
+                Self { sessions, path: Some(path) }
             }
-        };
-        Self { sessions, path: Some(path) }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Self { sessions: Vec::new(), path: Some(path) },
+            Err(_) => Self { sessions: Vec::new(), path: None },
+        }
     }
 
     pub fn sessions(&self) -> &[Session] {
