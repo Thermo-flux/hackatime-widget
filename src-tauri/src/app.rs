@@ -29,7 +29,9 @@ impl Timer {
         let mut t = self.state.lock().unwrap();
         let before = (t.completed_focus(), t.roll_day(today));
         act(&mut t, now);
-        let snap = t.snapshot(now);
+        let mut snap = t.snapshot(now);
+        let elapsed = t.focus_elapsed(now);
+        snap.focus_started_at = elapsed.map(|e| Utc::now().timestamp() - e.as_secs() as i64);
         if self.persist && (snap.completed_focus != before.0 || before.1) {
             // The count is a convenience: failing to save it must not break the timer.
             let _ = focus_day::save(&config::data_path("pomodoro-day.json"), today, snap.completed_focus);
@@ -39,6 +41,17 @@ impl Timer {
 }
 
 struct Sessions(Mutex<SessionStore>);
+
+/// Heartbeats for the running focus phase. Separate from `Heartbeats` (which belongs to a session)
+/// so the two never evict each other's window.
+struct FocusBeats(Mutex<activity::HeartbeatCache>);
+
+/// How much of the running focus phase was spent coding.
+#[derive(Serialize)]
+struct FocusActivity {
+    elapsed_secs: i64,
+    active_secs: f64,
+}
 
 /// Heartbeats already downloaded for the running session (see `activity::poll`).
 struct Heartbeats(Mutex<activity::HeartbeatCache>);
@@ -159,6 +172,15 @@ fn pomodoro_state(timer: State<Timer>) -> Snapshot {
     timer.with(|_, _| {})
 }
 
+/// Coding activity since the current focus phase started, or `None` when none is running.
+#[tauri::command]
+async fn focus_activity(timer: State<'_, Timer>, beats: State<'_, FocusBeats>) -> Result<Option<FocusActivity>> {
+    let Some(start) = timer.with(|_, _| {}).focus_started_at else { return Ok(None) };
+    let now = Utc::now().timestamp();
+    let live = activity::for_session(&config::load(), &beats.0, start, now).await?;
+    Ok(Some(FocusActivity { elapsed_secs: (now - start).max(0), active_secs: live.active_secs }))
+}
+
 #[tauri::command]
 fn pomodoro_start(timer: State<Timer>) -> Snapshot {
     timer.with(|t, now| t.start(now))
@@ -196,6 +218,7 @@ pub fn run() {
         .manage(Timer { state: Mutex::new(Pomodoro::new(cfg.pomodoro, today, saved_count)), persist: !cfg.mock })
         .manage(Sessions(Mutex::new(store)))
         .manage(Heartbeats(Mutex::new(activity::HeartbeatCache::default())))
+        .manage(FocusBeats(Mutex::new(activity::HeartbeatCache::default())))
         .setup(|app| {
             // Keep WebView2/WebKit data beside the config instead of in the OS app-data dir.
             let data_dir = config::data_path("webview-data");
@@ -219,6 +242,7 @@ pub fn run() {
             session_start,
             session_stop,
             pomodoro_state,
+            focus_activity,
             pomodoro_start,
             pomodoro_pause,
             pomodoro_reset,

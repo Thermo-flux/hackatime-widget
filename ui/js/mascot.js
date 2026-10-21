@@ -26,6 +26,9 @@ export const DEFAULT_LINES = {
   dizzy: ["Everything's spinning...", "Too... many... pokes.", "Seeing stars!", "Whoa, dizzy...", "Which way is up?", "Need a sec..."],
   love: ["Aww, thanks!", "I like you too!", "Best human ever.", "So cozy.", "Pets accepted!", "<3"],
   cheer: ["Phase complete!", "Well done!", "Nailed it!", "Yay, you!", "That's a win!", "High five!"],
+  focusHigh: ["Locked in. Great focus!", "Barely looked away!", "That was deep work.", "Laser focus!"],
+  focusMid: ["Solid round.", "Decent focus.", "Good enough, nice.", "Round done."],
+  focusLow: ["Distracted? Next round.", "Mostly thinking, huh?", "Try a quieter round.", "Break time. Reset."],
   pomoDone: ["Focus round done!", "Pomodoro complete!", "Earned that break!", "Look at that focus!", "One more down!", "Proud of you!"],
   sessionStart: ["Ooh, we're coding!", "Session started!", "Let's gooo!", "Here we go!", "Clock's on!"],
   sessionEnd: ["Good session!", "Nice work today.", "Session wrapped!", "That was productive!", "Time well spent."],
@@ -47,7 +50,7 @@ const MOOD_EXPRESSION = { idle: "neutral", human: "happy", ai: "happy", session:
 /** Reactions: line kind -> [expression, how long to hold it (ms)]. */
 const REACTIONS = {
   poke: ["happy", 1200], pokeMore: ["surprised", 1400], dizzy: ["dizzy", 2800], love: ["love", 2600],
-  cheer: ["excited", 2500], connected: ["excited", 2800], pomoDone: ["proud", 3200], sessionStart: ["excited", 2200], sessionEnd: ["proud", 2600],
+  cheer: ["excited", 2500], connected: ["excited", 2800], pomoDone: ["proud", 3200], focusHigh: ["proud", 3200], focusMid: ["happy", 2800], focusLow: ["thinking", 3000], sessionStart: ["excited", 2200], sessionEnd: ["proud", 2600],
   longSession: ["proud", 3200], streak: ["excited", 3000], error: ["grumpy", 2600], loading: ["thinking", 1600],
   chatter: ["happy", 1600], drowsy: ["sleepy", 2000], wake: ["surprised", 1500],
   morning: ["happy", 2600], afternoon: ["happy", 2600], evening: ["wink", 2000], night: ["sleepy", 2600],
@@ -208,6 +211,11 @@ export function signal(key, value) {
 /** A short celebration (e.g. a Pomodoro phase finished): proud after a focus round, excited otherwise. */
 export function cheer() {
   react(lastEnded === "focus" ? "pomoDone" : "cheer");
+}
+
+/** A focus round just ended: react to how much of it was spent coding (percent, 0-100). */
+export function focusEnd(percent) {
+  react(percent >= 80 ? "focusHigh" : percent >= 40 ? "focusMid" : "focusLow");
 }
 
 function greetingKind(hour = new Date().getHours()) {

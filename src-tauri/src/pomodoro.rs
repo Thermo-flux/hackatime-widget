@@ -58,6 +58,9 @@ pub struct Snapshot {
     pub completed_focus: u32,
     /// Focus sessions per long break, so the UI can draw the cycle (0: no long breaks).
     pub long_break_every: u32,
+    /// Unix seconds when the current focus phase first started running; `None` before that, during
+    /// breaks, and after a reset. Filled in by the app, which knows the wall clock.
+    pub focus_started_at: Option<i64>,
     /// Phase that ended during this call, so the UI can alert once.
     pub finished: Option<Phase>,
     /// The configured lengths in minutes (they apply from the next phase if the current one had started).
@@ -78,6 +81,8 @@ pub struct Pomodoro {
     deadline: Option<Instant>,
     /// Length of the current phase, fixed when it began (a settings change doesn't stretch a started phase).
     total: Duration,
+    /// When the current focus phase first started running (pauses don't move it).
+    began: Option<Instant>,
 }
 
 impl Pomodoro {
@@ -85,11 +90,16 @@ impl Pomodoro {
     pub fn new(cfg: PomodoroConfig, day: NaiveDate, completed_focus: u32) -> Self {
         let cfg = cfg.clamped();
         let total = Self::length(&cfg, Phase::Focus);
-        Self { cfg, phase: Phase::Focus, completed_focus, day, remaining: total, deadline: None, total }
+        Self { cfg, phase: Phase::Focus, completed_focus, day, remaining: total, deadline: None, total, began: None }
     }
 
     pub fn completed_focus(&self) -> u32 {
         self.completed_focus
+    }
+
+    /// How long ago the current focus phase first started running, if it has.
+    pub fn focus_elapsed(&self, now: Instant) -> Option<Duration> {
+        (self.phase == Phase::Focus).then_some(self.began?).map(|b| now.saturating_duration_since(b))
     }
 
     /// Starts today's count over when the local date has moved on. Returns whether it did.
@@ -130,6 +140,9 @@ impl Pomodoro {
     pub fn start(&mut self, now: Instant) {
         if self.deadline.is_none() {
             self.deadline = Some(now + self.remaining);
+            if self.phase == Phase::Focus && self.began.is_none() {
+                self.began = Some(now);
+            }
         }
     }
 
@@ -142,6 +155,7 @@ impl Pomodoro {
     /// Restart the current phase, stopped.
     pub fn reset(&mut self) {
         self.deadline = None;
+        self.began = None;
         self.total = Self::length(&self.cfg, self.phase);
         self.remaining = self.total;
     }
@@ -171,6 +185,7 @@ impl Pomodoro {
         self.total = Self::length(&self.cfg, phase);
         self.remaining = self.total;
         self.deadline = run.then(|| now + self.remaining);
+        self.began = (run && phase == Phase::Focus).then_some(now);
     }
 
     /// Advance the clock; returns the phase that just ended, if any.
@@ -201,6 +216,7 @@ impl Pomodoro {
             total_secs: self.total.as_secs(),
             completed_focus: self.completed_focus,
             long_break_every: self.cfg.long_break_every,
+            focus_started_at: None,
             finished,
             focus_min: self.cfg.focus_min,
             short_break_min: self.cfg.short_break_min,
@@ -221,6 +237,36 @@ mod tests {
 
     fn with(cfg: PomodoroConfig) -> Pomodoro {
         Pomodoro::new(cfg, day(21), 0)
+    }
+
+    #[test]
+    fn the_focus_start_is_the_first_start_and_survives_pauses() {
+        let (mut p, t0) = (with(PomodoroConfig::default()), Instant::now());
+        assert_eq!(p.focus_elapsed(t0), None);
+        p.start(t0);
+        p.pause(t0 + 5 * MIN);
+        p.start(t0 + 8 * MIN);
+        assert_eq!(p.focus_elapsed(t0 + 10 * MIN), Some(10 * MIN));
+    }
+
+    #[test]
+    fn reset_and_breaks_have_no_focus_start() {
+        let (mut p, t0) = (with(PomodoroConfig::default()), Instant::now());
+        p.start(t0);
+        p.reset();
+        assert_eq!(p.focus_elapsed(t0 + MIN), None);
+        p.start(t0);
+        p.snapshot(t0 + 25 * MIN); // focus ends, the short break begins
+        assert_eq!(p.focus_elapsed(t0 + 26 * MIN), None);
+    }
+
+    #[test]
+    fn auto_start_begins_the_next_focus_phase_fresh() {
+        let (mut p, t0) = (with(PomodoroConfig { auto_start: true, ..Default::default() }), Instant::now());
+        p.start(t0);
+        p.snapshot(t0 + 25 * MIN); // into the break, running
+        p.snapshot(t0 + 30 * MIN); // break over, focus running again
+        assert_eq!(p.focus_elapsed(t0 + 33 * MIN), Some(3 * MIN));
     }
 
     #[test]

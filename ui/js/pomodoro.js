@@ -1,7 +1,7 @@
 import { $ } from "./lib/dom.js";
-import { mmss } from "./lib/format.js";
+import { mmss, short } from "./lib/format.js";
 import { invoke } from "./lib/tauri.js";
-import { signal, cheer } from "./mascot.js";
+import { signal, cheer, focusEnd } from "./mascot.js";
 
 const LABELS = { focus: "Focus", short_break: "Short break", long_break: "Long break" };
 const CIRCUMFERENCE = 2 * Math.PI * 52;
@@ -10,6 +10,24 @@ const LENGTH_KEY = { focus: "focus_min", short_break: "short_break_min", long_br
 let state = null;
 let poll = null;
 let audio = null;
+let codedPoll = null;
+let coded = null; // { active_secs, elapsed_secs } from the last focus_activity poll, for the running focus phase
+
+/** "coded 14m of 17m": how much of the running focus round had editor activity. Hidden when unknown. */
+function paintCoded() {
+  const line = $("pomo-coded");
+  line.hidden = !coded;
+  if (coded) line.textContent = `coded ${short(coded.active_secs)} of ${short(coded.elapsed_secs)}`;
+}
+
+async function refreshCoded() {
+  if (!state || state.phase !== "focus" || !state.focus_started_at) coded = null;
+  else {
+    try { coded = await invoke("focus_activity"); } catch { coded = null; } // no key, offline...: just say nothing
+  }
+  if (!$("pomo-settings").hidden) return; // the settings view is open; it repaints on close
+  paintCoded();
+}
 
 function chime() {
   try {
@@ -85,11 +103,20 @@ function render(s) {
   renderDots(s);
   $("pomo-count").textContent = s.completed_focus > MAX_DOTS ? "today" : `${s.completed_focus} today`; // the dots row already holds the number when it collapses
   document.title = s.running ? `${time} - ${label}` : "Hackatime";
+  if (!prev || prev.focus_started_at !== s.focus_started_at || prev.phase !== s.phase) {
+    if (s.phase !== "focus" || !s.focus_started_at) { if (!s.finished) coded = null; paintCoded(); }
+    else refreshCoded();
+  }
 
   $("pomo-reset").disabled = mode === "idle" && !pendingLengths(s);
 
   signal("pomo", { running: s.running, phase: s.phase });
-  if (s.finished) {
+  if (s.finished === "focus" && coded && coded.elapsed_secs > 0) {
+    // How the round went, from the last activity poll (at most a minute old).
+    chime();
+    focusEnd((coded.active_secs / coded.elapsed_secs) * 100);
+    announce(`${LABELS[s.finished]} done. You coded ${short(coded.active_secs)} of ${short(coded.elapsed_secs)}. ${label} next, ${mmss(s.total_secs)}.`);
+  } else if (s.finished) {
     chime();
     cheer();
     announce(`${LABELS[s.finished]} done. ${label} next, ${mmss(s.total_secs)}.`);
@@ -102,7 +129,7 @@ const call = (cmd, args) => invoke(cmd, args).then(render);
 
 // ---- Focus / rest length settings ----
 let draft = null;
-const MAIN = ["pomo-phase", "pomo-toggle", "pomo-controls", "pomo-sessions"];
+const MAIN = ["pomo-phase", "pomo-toggle", "pomo-controls", "pomo-sessions", "pomo-coded"];
 const ROWS = () => document.querySelectorAll("#pomo-settings .stepper");
 const same = (a, b) => a.focus_min === b.focus_min && a.short_break_min === b.short_break_min && a.long_break_min === b.long_break_min;
 const current = () => ({ focus_min: state.focus_min, short_break_min: state.short_break_min, long_break_min: state.long_break_min });
@@ -145,6 +172,7 @@ function paintSettings() {
 function showSettings(open) {
   $("pomo-settings").hidden = !open;
   for (const id of MAIN) $(id).hidden = open;
+  if (!open) paintCoded(); // hidden again unless there is something to show
   $("pomo-set").setAttribute("aria-expanded", String(open));
   $("panel-pomodoro").classList.toggle("is-editing", open);
   if (open) document.querySelector('#pomo-settings [role="spinbutton"]').focus();
@@ -255,11 +283,13 @@ function initSettings() {
   $("pomo-save").addEventListener("click", save);
 }
 
-export const pause = () => { clearInterval(poll); poll = null; };
+export const pause = () => { clearInterval(poll); clearInterval(codedPoll); poll = codedPoll = null; };
 export function resume() {
   call("pomodoro_state");
   clearInterval(poll);
   poll = setInterval(() => call("pomodoro_state"), 1000);
+  clearInterval(codedPoll);
+  codedPoll = setInterval(refreshCoded, 60_000);
 }
 
 export function init() {

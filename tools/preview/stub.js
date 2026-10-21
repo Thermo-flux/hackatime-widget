@@ -57,9 +57,9 @@
 
   const POMO = { focus_min: 25, short_break_min: 5, long_break_min: 15 };
   const pomo = () => {
-    const base = { running: false, completed_focus: scenario === "pomo_many" ? 12 : 2, long_break_every: 4, finished: null, ...POMO };
+    const base = { running: false, focus_started_at: null, completed_focus: scenario === "pomo_many" ? 12 : 2, long_break_every: 4, finished: null, ...POMO };
     switch (scenario) {
-      case "pomo_running": return { ...base, phase: "focus", running: true, remaining_secs: 17 * 60 + 23, total_secs: 1500 };
+      case "pomo_running": return { ...base, focus_started_at: Math.floor(Date.now() / 1000) - 17 * 60, phase: "focus", running: true, remaining_secs: 17 * 60 + 23, total_secs: 1500 };
       case "pomo_many": return { ...base, phase: "focus", remaining_secs: 1500, total_secs: 1500 };
       case "pomo_paused": return { ...base, phase: "focus", remaining_secs: 9 * 60 + 40, total_secs: 1500 };
       case "pomo_break": return { ...base, phase: "short_break", running: true, remaining_secs: 3 * 60 + 12, total_secs: 300 };
@@ -92,6 +92,7 @@
     session_state: sessionView,
     session_start: () => null,
     session_stop: () => true,
+    focus_activity: () => (scenario === "pomo_running" ? { elapsed_secs: 17 * 60, active_secs: 14 * 60 } : null),
     pomodoro_state: pomo, pomodoro_start: pomo, pomodoro_pause: pomo, pomodoro_reset: pomo, pomodoro_skip: pomo,
   };
 
