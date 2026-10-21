@@ -231,3 +231,20 @@
 .tile__label { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile__label--wrap { white-space: normal; line-height: 1.1; text-wrap: balance; }
 .regular { font-size: 13px; flex-wrap: wrap; row-gap: 2px; }
+
+/* ---- Offline banner and freshness ---- */
+.banner {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  padding: 2px var(--space-2); border-radius: var(--radius-md);
+  background: var(--warn-bg); color: var(--warn); font-size: var(--fs-xs); font-weight: var(--fw-semibold);
+}
+.banner[hidden] { display: none; }
+.link-btn { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
+.link-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.langs__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.updated { color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
+.updated:empty { display: none; }
+#stats-ok.is-stale .total,
+#stats-ok.is-stale .stat-bar,
+#stats-ok.is-stale .legend,
+#stats-ok.is-stale .langs { opacity: 0.5; }

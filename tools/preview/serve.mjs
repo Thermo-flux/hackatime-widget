@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ui = resolve(here, "../../ui");
+const CSP = "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost; script-src 'self'; style-src 'self'; img-src 'self' data:";
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml" };
 
 export function startServer(port = 4173) {
@@ -24,7 +25,9 @@ export function startServer(port = 4173) {
       if (path === "/index.html") {
         body = Buffer.from(body.toString("utf8").replace('<script type="module"', '<script src="/__preview/stub.js"></script>\n  <script type="module"'));
       }
-      res.writeHead(200, { "content-type": TYPES[extname(file)] ?? "application/octet-stream", "cache-control": "no-store" });
+      // Same policy as src-tauri/tauri.conf.json, so a CSP violation shows up in preview runs too (the stub
+      // is a same-origin script, so it is allowed).
+      res.writeHead(200, { "content-type": TYPES[extname(file)] ?? "application/octet-stream", "cache-control": "no-store", "content-security-policy": CSP });
       res.end(body);
     } catch {
       res.writeHead(404); res.end("not found");

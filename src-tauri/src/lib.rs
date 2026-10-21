@@ -3,10 +3,12 @@
 
 mod activity;
 mod api;
+mod cache;
 #[cfg(not(test))]
 mod app;
 mod config;
 mod error;
+mod fsutil;
 mod pomodoro;
 mod sessions;
 mod stats;

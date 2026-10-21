@@ -24,7 +24,9 @@
         "skipTaskbar": true
       }
     ],
-    "security": { "csp": null }
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost; script-src 'self'; style-src 'self'; img-src 'self' data:"
+    }
   },
   "bundle": {
     "active": true,

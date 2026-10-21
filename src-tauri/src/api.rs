@@ -56,6 +56,16 @@ impl Range {
         }
     }
 
+    /// Stable name, used as the stats-cache key (so unknown strings from the UI share Today's slot).
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Today => "today",
+            Self::Last7 => "7d",
+            Self::Last30 => "30d",
+            Self::AllTime => "all",
+        }
+    }
+
     /// First local day of the range; `None` means "from the beginning" (the API defaults to 10 years).
     fn start(self) -> Option<NaiveDate> {
         self.start_on(Local::now().date_naive())

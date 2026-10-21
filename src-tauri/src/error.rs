@@ -6,11 +6,20 @@ pub enum Error {
     #[error("no API key configured")]
     MissingApiKey,
     #[error("could not reach Hackatime: {0}")]
-    Http(#[from] reqwest::Error),
+    Http(reqwest::Error),
     #[error("server returned {0}")]
     Status(u16),
+    #[error("That doesn't look like a Hackatime key")]
+    InvalidKey,
     #[error("config error: {0}")]
     Config(String),
+}
+
+/// Drops the request URL from the error, so the server address (and anything in it) never reaches the UI.
+impl From<reqwest::Error> for Error {
+    fn from(e: reqwest::Error) -> Self {
+        Error::Http(e.without_url())
+    }
 }
 
 impl Error {
@@ -21,6 +30,7 @@ impl Error {
             Error::Status(401 | 403) => "unauthorized",
             Error::Http(_) => "network",
             Error::Status(_) => "server",
+            Error::InvalidKey => "invalid_key",
             Error::Config(_) => "config",
         }
     }

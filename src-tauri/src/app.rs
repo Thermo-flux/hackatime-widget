@@ -1,12 +1,12 @@
 //! Tauri glue: commands and the app builder. Compiled only for the real app, because
 //! linking Tauri's UI code into unit-test binaries fails on Windows (no comctl32 v6 manifest).
 
-use crate::config::{self, Config, PomodoroLengths};
+use crate::config::{self, ConfigView, PomodoroLengths};
 use crate::error::Result;
 use crate::pomodoro::{Pomodoro, Snapshot};
 use crate::sessions::{self, SessionStore, Summary};
 use crate::stats::Stats;
-use crate::{activity, api};
+use crate::{activity, api, cache};
 use chrono::{FixedOffset, Local, Utc};
 use serde::Serialize;
 use std::sync::Mutex;
@@ -17,6 +17,9 @@ use tauri::State;
 struct Timer(Mutex<Pomodoro>);
 
 struct Sessions(Mutex<SessionStore>);
+
+/// Heartbeats already downloaded for the running session (see `activity::poll`).
+struct Heartbeats(Mutex<activity::HeartbeatCache>);
 
 fn local_offset() -> FixedOffset {
     FixedOffset::east_opt(Local::now().offset().local_minus_utc()).unwrap_or(FixedOffset::east_opt(0).unwrap())
@@ -38,7 +41,7 @@ struct SessionView {
 }
 
 #[tauri::command]
-async fn session_state(store: State<'_, Sessions>) -> Result<SessionView> {
+async fn session_state(store: State<'_, Sessions>, beats: State<'_, Heartbeats>) -> Result<SessionView> {
     let (now, tz) = (Utc::now().timestamp(), local_offset());
     // Read what we need and release the lock before any network await.
     let (start, summary) = {
@@ -48,7 +51,7 @@ async fn session_state(store: State<'_, Sessions>) -> Result<SessionView> {
     let active = match start {
         None => None,
         Some(start) => {
-            let (activity, activity_error) = match activity::for_session(&config::load(), start, now).await {
+            let (activity, activity_error) = match activity::for_session(&config::load(), &beats.0, start, now).await {
                 Ok(a) => (Some(a), None),
                 Err(e) => (None, Some(e.to_string())),
             };
@@ -59,32 +62,60 @@ async fn session_state(store: State<'_, Sessions>) -> Result<SessionView> {
 }
 
 #[tauri::command]
-fn session_start(store: State<Sessions>) -> Result<()> {
+fn session_start(store: State<Sessions>, beats: State<Heartbeats>) -> Result<()> {
+    beats.0.lock().unwrap().clear();
     store.0.lock().unwrap().start(Utc::now().timestamp())
 }
 
 /// Returns false when the session was too short to keep.
 #[tauri::command]
-fn session_stop(store: State<Sessions>) -> Result<bool> {
+fn session_stop(store: State<Sessions>, beats: State<Heartbeats>) -> Result<bool> {
+    beats.0.lock().unwrap().clear();
     store.0.lock().unwrap().stop(Utc::now().timestamp())
 }
 
 #[tauri::command]
 async fn get_stats(range: String) -> Result<Stats> {
-    api::fetch_stats(&config::load(), api::Range::parse(&range)).await
+    let cfg = config::load();
+    let range = api::Range::parse(&range);
+    let stats = api::fetch_stats(&cfg, range).await?;
+    if !cfg.mock {
+        // The cache is a convenience: failing to write it must not fail the refresh.
+        let _ = cache::store(&config::data_path("stats-cache.json"), range.name(), &stats, Utc::now().timestamp());
+    }
+    Ok(stats)
 }
 
-/// What's saved on disk; a key picked up from `.wakatime.cfg` is used but never copied into it.
-#[tauri::command]
-fn get_config() -> Config {
-    config::load_file()
+#[derive(Serialize)]
+struct CachedStats {
+    fetched_at: i64,
+    stale: bool,
+    stats: Stats,
 }
 
+/// The last good stats for a range, or `None` if there are none (or in demo mode).
 #[tauri::command]
-fn set_config(timer: State<Timer>, cfg: Config) -> Result<()> {
-    config::save(&cfg)?;
-    // A started timer keeps its time (saving the API key mustn't reset a running Pomodoro).
-    timer.0.lock().unwrap().set_config(cfg.pomodoro);
+fn get_cached_stats(range: String) -> Option<CachedStats> {
+    if config::load().mock {
+        return None;
+    }
+    let now = Utc::now().timestamp();
+    let entry = cache::StatsCache::load(&config::data_path("stats-cache.json")).get(api::Range::parse(&range).name())?.clone();
+    Some(CachedStats { fetched_at: entry.fetched_at, stale: cache::is_stale(&entry, now), stats: entry.stats })
+}
+
+/// What the UI may see of the config. The key and server URL never leave Rust.
+#[tauri::command]
+fn get_config() -> ConfigView {
+    (&config::load()).into()
+}
+
+/// Checks the key's shape before saving it, so a typo never costs a network call.
+#[tauri::command]
+fn set_api_key(key: String) -> Result<()> {
+    config::save_api_key(&key)?;
+    // Saved stats belong to the previous account.
+    let _ = std::fs::remove_file(config::data_path("stats-cache.json"));
     Ok(())
 }
 
@@ -148,6 +179,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(Timer(Mutex::new(Pomodoro::new(cfg.pomodoro))))
         .manage(Sessions(Mutex::new(store)))
+        .manage(Heartbeats(Mutex::new(activity::HeartbeatCache::default())))
         .setup(|app| {
             // Keep WebView2/WebKit data beside the config instead of in the OS app-data dir.
             let data_dir = config::data_path("webview-data");
@@ -162,8 +194,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_stats,
+            get_cached_stats,
             get_config,
-            set_config,
+            set_api_key,
             set_pomodoro,
             quit,
             session_state,
