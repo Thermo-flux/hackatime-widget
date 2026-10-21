@@ -18,7 +18,7 @@
     };
   }
 
-  const RANGE_SCALE = { today: 1, week: 4.2, month: 16, all: 60 };
+  const RANGE_SCALE = { today: 1, "7d": 4.2, "30d": 16, all: 60 };
   const statsFor = (range) => {
     const k = RANGE_SCALE[range] ?? 1;
     switch (scenario) {

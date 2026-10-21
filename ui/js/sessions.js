@@ -48,10 +48,16 @@ function renderLive(a, summary) {
     for (const id of ["live-human", "live-ai", "live-coding", "live-focus"]) $(id).textContent = "–";
     $("live-bar-human").style.width = "0%";
     $("live-bar-ai").style.width = "0%";
+    $("live-bar").classList.add("stat-bar--unknown");
+    $("live-legend").hidden = true;
+    $("live-legend-unknown").hidden = false;
     $("live-bar").setAttribute("aria-label", "No coding activity available");
     $("live-note").textContent = a.activity_error ? `Coding activity unavailable: ${a.activity_error}` : "";
     return;
   }
+  $("live-bar").classList.remove("stat-bar--unknown");
+  $("live-legend").hidden = false;
+  $("live-legend-unknown").hidden = true;
   const ai = act.ai_percent;
   const human = act.active_secs > 0 ? 100 - ai : 0;
   $("live-human").textContent = short(act.human_secs);

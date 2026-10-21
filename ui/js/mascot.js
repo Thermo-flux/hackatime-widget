@@ -15,6 +15,9 @@ export const DEFAULT_LINES = {
   focus: ["Focus mode. Shh.", "Deep work time.", "One thing at a time.", "Notifications? Never heard.", "Head down, ship it.", "I'll be quiet. Promise."],
   break: ["Break time. Stretch!", "Rest your eyes.", "Grab some water!", "Look out a window.", "Shoulders down. Breathe.", "Walk around a bit!"],
   streak: ["Look at that streak!", "Keep it going!", "Day after day!", "Streak on fire!", "Unstoppable!", "Don't break the chain!"],
+  empty: ["Nothing logged yet today.", "Blank slate. Let's start!", "Haven't seen code yet.", "Ready for the first commit?", "A fresh, empty day."],
+  no_key: ["Let's get you connected.", "I need your Hackatime key.", "Paste your key to begin.", "No key yet. Let's fix that.", "Connect me to Hackatime!"],
+  offline: ["Can't reach Hackatime.", "Offline. I'll keep trying.", "No signal. I'll retry.", "Network's down. Retrying.", "Waiting for the network."],
   error: ["Can't reach Hackatime...", "Hmm, something's off.", "Connection hiccup.", "No signal. Retrying...", "The server's napping?", "We'll be back."],
   // Reactions (short events)
   poke: ["Hehe!", "Boop!", "That tickles.", "Hi there!", "You rang?", "*wiggle*", "Oh, hello!", "Poke accepted."],
@@ -39,7 +42,7 @@ export const DEFAULT_LINES = {
 export const LINE_KINDS = Object.keys(DEFAULT_LINES);
 
 /** Expression shown for each persistent mood. */
-const MOOD_EXPRESSION = { idle: "neutral", human: "happy", ai: "happy", session: "focus", focus: "focus", break: "sleepy", streak: "happy", error: "sad" };
+const MOOD_EXPRESSION = { idle: "neutral", human: "happy", ai: "happy", session: "focus", focus: "focus", break: "sleepy", streak: "happy", error: "sad", empty: "neutral", no_key: "neutral", offline: "sad" };
 /** Reactions: line kind -> [expression, how long to hold it (ms)]. */
 const REACTIONS = {
   poke: ["happy", 1200], pokeMore: ["surprised", 1400], dizzy: ["dizzy", 2800], love: ["love", 2600],
@@ -51,7 +54,7 @@ const REACTIONS = {
 /** Expressions whose eyes are plain enough to blink. */
 const CAN_BLINK = new Set(["neutral", "happy", "focus", "sad", "surprised", "thinking"]);
 /** Moods in which the mascot may doze off / fidget (not while focusing or on errors). */
-const CALM = new Set(["idle", "human", "ai", "streak"]);
+const CALM = new Set(["idle", "human", "ai", "streak", "empty"]);
 
 const DROWSY_AFTER = 10 * 60 * 1000; // no input for 10 minutes
 const LONG_SESSION = 60 * 60 * 1000;
@@ -73,7 +76,7 @@ let lastEnded = null; // the Pomodoro phase that ended most recently
 let sessionSince = 0;
 let longSessionSaid = false;
 let everLoaded = false;
-const signals = { error: false, pomo: null, session: false, ai: null, streak: 0 };
+const signals = { no_key: false, offline: false, error: false, pomo: null, session: false, ai: null, streak: 0, empty: false };
 
 /** Paint a sprite with an optional list of expression patches applied in order. */
 export function draw(canvas, t, ...patchNames) {
@@ -162,11 +165,15 @@ export function express(expr, ms = 1500) {
 }
 
 function evaluate() {
-  const { error, pomo, session, ai, streak } = signals;
+  const { no_key, offline, error, pomo, session, ai, streak, empty } = signals;
   let next = "idle";
-  if (error) next = "error";
+  // Priority: no_key > offline > error > session/pomodoro > empty > what the data says > time of day.
+  if (no_key) next = "no_key";
+  else if (offline) next = "offline";
+  else if (error) next = "error";
   else if (pomo?.running) next = pomo.phase === "focus" ? "focus" : "break";
   else if (session) next = "session";
+  else if (empty) next = "empty";
   else if (ai !== null && ai > 50) next = "ai";
   else if (ai !== null) next = "human";
   else if (streak >= 3) next = "streak";
@@ -178,17 +185,17 @@ function evaluate() {
   say(mood);
 }
 
-/** Report something the mascot should react to: error, pomo, session, ai, streak. */
+/** Report something the mascot should react to: no_key, offline, error, empty, pomo, session, ai, streak. */
 export function signal(key, value) {
   const prev = signals[key];
   signals[key] = value;
-  if (key === "error" || key === "ai") everLoaded = true;
+  if (key === "error" || key === "ai" || key === "offline" || key === "no_key") everLoaded = true;
   evaluate();
   const now = Date.now();
   if (key === "session" && Boolean(value) !== Boolean(prev)) {
     if (value) { sessionSince = now; longSessionSaid = false; react("sessionStart"); }
     else { if (sessionSince) react("sessionEnd"); sessionSince = 0; }
-  } else if (key === "streak" && value >= 3 && value > (prev ?? 0) && mood !== "focus") {
+  } else if (key === "streak" && value >= 3 && value > (prev ?? 0) && !["focus", "empty", "no_key", "offline", "error"].includes(mood)) {
     react("streak");
   } else if (key === "pomo") {
     const was = pomoPrev?.phase, is = value?.phase;

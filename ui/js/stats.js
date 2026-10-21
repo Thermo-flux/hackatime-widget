@@ -36,13 +36,16 @@ function render(s) {
   const known = s.ai_available !== false; // false: the AI figure couldn't be fetched
   const ai = known ? (s.ai_percent ?? 0) : 0;
   const human = total > 0 ? 100 - ai : 0;
+  const unknown = !known && total > 0; // can't split the bar without the AI figure, so don't claim 100% human
   $("total").textContent = fmt(total);
+  $("stat-bar").classList.toggle("stat-bar--unknown", unknown);
+  $("legend-split").hidden = unknown;
+  $("legend-unknown").hidden = !unknown;
+  $("legend-unknown").textContent = `${fmt(total)} coded · AI share unavailable`;
   $("human").textContent = fmt(s.human_seconds);
   $("ai").textContent = known ? fmt(s.ai_seconds) : "–";
-  $("human-pct").textContent = known ? `${human.toFixed(0)}%` : "–";
-  $("ai-pct").textContent = known ? `${ai.toFixed(0)}%` : "–";
-  $("bar-human").style.width = `${human}%`;
-  $("bar-ai").style.width = `${ai}%`;
+  $("bar-human").style.width = `${unknown ? 0 : human}%`;
+  $("bar-ai").style.width = `${unknown ? 0 : ai}%`;
   $("stat-bar").setAttribute(
     "aria-label",
     total <= 0
@@ -54,6 +57,7 @@ function render(s) {
   renderLanguages(s.languages);
   $("mock-badge").hidden = !s.mock;
   signal("ai", known && total > 0 ? ai : null);
+  signal("empty", total === 0);
 }
 
 export async function refresh() {
@@ -61,10 +65,16 @@ export async function refresh() {
   try {
     render(await invoke("get_stats", { range }));
     show("ok");
+    signal("no_key", false);
+    signal("offline", false);
     signal("error", false);
   } catch (e) {
-    signal("error", e.code === "network" || e.code === "server");
-    if (e.code === "no_key" || e.code === "unauthorized") {
+    const needsKey = e.code === "no_key" || e.code === "unauthorized";
+    signal("no_key", needsKey);
+    signal("offline", e.code === "network");
+    signal("error", e.code === "server");
+    if (needsKey) {
+      signal("empty", false);
       $("key-msg").textContent =
         e.code === "unauthorized" ? "Hackatime rejected that key. Check it and try again." : "Connect your Hackatime account to see your stats.";
       show("needs-key");

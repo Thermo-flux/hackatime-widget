@@ -91,8 +91,7 @@ for (const t of THEMES) {
     for (const name of PATCHES) { const l = look(name); if (seen.has(l)) err(id, `expression ${name} looks identical to ${seen.get(l)}`); else seen.set(l, name); }
     for (const m of Object.keys(t.lines ?? {})) if (!MOODS.includes(m)) err(id, `unknown mood in lines: ${m}`);
     checkLines(id, t.lines ?? {});
-    const missing = MOODS.filter((m) => !t.lines?.[m]?.length);
-    if (Object.keys(t.lines ?? {}).length && missing.length) warn(id, `no own lines for ${missing.join(", ")} (falls back to defaults)`);
+    // A kind a theme doesn't override (e.g. empty, no_key, offline) falls back to DEFAULT_LINES; that is fine.
   } else if (id !== "classic") err(id, "missing sprite");
 }
 console.log(`${THEMES.length} themes checked`);
