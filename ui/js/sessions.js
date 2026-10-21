@@ -11,21 +11,41 @@ let live = null; // { elapsed, at } so the clock can run locally between polls
 
 const pct = (n) => `${Math.round(n)}%`;
 
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "Tue 14 Oct" for a `YYYY-MM-DD` day, plus its weekday for the label under the bar. */
+function dayParts(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const wd = WEEKDAYS[new Date(y, m - 1, d).getDay()];
+  return { weekday: wd, text: `${wd} ${d} ${MONTHS[m - 1]}` };
+}
+
 function renderChart(daily) {
   const max = Math.max(1, ...daily.map((d) => d.secs));
+  $("sum-days").replaceChildren(
+    ...daily.map((d, i) => {
+      const label = el("span", { text: dayParts(d.date).weekday[0] });
+      label.classList.toggle("is-today", i === daily.length - 1);
+      return label;
+    }),
+  );
   $("sum-chart").replaceChildren(
     ...daily.map((d, i) => {
       const bar = el("span", { class: "chart__bar" });
       bar.classList.toggle("chart__bar--empty", d.secs === 0);
       bar.classList.toggle("chart__bar--today", i === daily.length - 1);
       bar.style.height = d.secs === 0 ? "" : `${Math.max(6, (d.secs / max) * 100)}%`;
-      bar.title = `${d.date}: ${d.secs ? short(d.secs) : "no session"}`;
+      bar.title = `${dayParts(d.date).text} \u00b7 ${d.secs ? short(d.secs) : "no session"}`;
       return bar;
     }),
   );
 }
 
 function renderSummary(s) {
+  const empty = s.total_sessions === 0;
+  $("sess-empty").hidden = !empty;
+  $("sess-stats").hidden = empty;
   $("sum-count").textContent = String(s.total_sessions);
   $("sum-total").textContent = short(s.total_secs);
   $("sum-avg").textContent = short(s.avg_secs);
