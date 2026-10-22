@@ -83,10 +83,11 @@
   });
   // set_mode can't resize a browser page: it answers like Rust would for a window that didn't have to be clamped,
   // unless a test sets window.__TAURI_STUB__.shift = [x, y] (logical px clamping moved the window by).
+  // { preview: true } calls (a collapse aiming its animation) are answered but not counted as switches.
   const setMode = (a) => {
     const [width, height] = a.mode === "compact" ? [240, 60] : [320, 436];
     const [shift_x, shift_y] = window.__TAURI_STUB__.shift ?? [0, 0];
-    window.__TAURI_STUB__.modeCalls.push(a.mode);
+    if (!a.preview) window.__TAURI_STUB__.modeCalls.push(a.mode);
     return { mode: a.mode, x: 100, y: 100, width, height, scale: 1, shift_x, shift_y };
   };
 

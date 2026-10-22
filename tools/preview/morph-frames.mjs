@@ -1,7 +1,7 @@
 // Frame-by-frame screenshots of the compact-mode morph (mode.js), per theme, plus numeric checks that the pill lands
 // exactly where the compact window will show it. No Tauri: the stub answers set_mode; the window resize is simulated
 // with the viewport size (320x436 full, 240x60 compact, the window's top-right corner fixed).
-//   node tools/preview/morph-frames.mjs out/ [--themes classic,avocado] [--shift 80,0]
+//   node tools/preview/morph-frames.mjs out/ [--themes classic,avocado] [--shift 80,0] [--cshift -50,20]
 // Writes <theme>__collapse__<ms>.png / <theme>__expand__<ms>.png and sheet-morph.png. Exits 1 if a check fails.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -12,7 +12,8 @@ import { startServer } from "./serve.mjs";
 const args = process.argv.slice(2);
 const flag = (name) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1]?.split(",") : null; };
 const out = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--")) ?? "out-morph";
-const shift = (flag("shift") ?? ["0", "0"]).map(Number);
+const shift = (flag("shift") ?? ["0", "0"]).map(Number); // expand: clamping moved the grown window by this
+const cshift = (flag("cshift") ?? ["0", "0"]).map(Number); // collapse: the pill will be clamped back by this
 mkdirSync(out, { recursive: true });
 const FULL = [320, 436], COMPACT = [240, 60];
 const TIMES = [0, 30, 60, 90, 120, 150, 180, 220];
@@ -61,17 +62,30 @@ for (const theme of themes) {
   await sleep(250);
   const row = [];
 
-  // ---- collapse ----
+  // ---- collapse ---- (with --cshift, Rust's preview says the pill will be clamped back by `cshift`)
+  await page.evaluate((s) => { window.__TAURI_STUB__.shift = s; }, cshift);
   check((await startFrozen("compact")) === 5, `${theme}: collapse should run 5 animations`);
   for (const t of TIMES) {
     await seek(t);
+    // On an undecorated theme the card is cut exactly to the travelling surface: nothing spills outside it.
+    if (await page.evaluate(() => !document.querySelector(".shell > .deco")?.getClientRects().length
+      && ["::before", "::after"].every((p) => ["none", "normal"].includes(getComputedStyle(document.getElementById("shell"), p).content)))) {
+      const [clip, surf] = await page.evaluate(() => {
+        const s = document.getElementById("shell").getBoundingClientRect();
+        const m = getComputedStyle(document.getElementById("shell")).clipPath.match(/inset\(([-\d.]+)px ([-\d.]+)px ([-\d.]+)px ([-\d.]+)px/);
+        const [t, r, b, l] = m ? m.slice(1).map(Number) : [0, 0, 0, 0];
+        const mr = document.getElementById("morph").getBoundingClientRect();
+        return [[s.left + l, s.top + t, s.width - l - r, s.height - t - b], [mr.left, mr.top, mr.width, mr.height]];
+      });
+      if (t > 0) check(clip.every((v, i) => Math.abs(v - surf[i]) < 1.5), `${theme}: at ${t}ms the card (${clip.map(Math.round)}) spills outside the surface (${surf.map(Math.round)})`);
+    }
     const file = `${theme}__collapse__${t}.png`;
     await page.screenshot({ path: `${out}/${file}`, omitBackground: true });
     row.push({ file, label: `collapse ${t}ms`, w: FULL[0], h: FULL[1] });
   }
   // End of the morph, still in the full window: pill and surface on the pill's box, hand-over must be invisible.
   const morphEnd = await rect("#morph"), pillEnd = await rect("#pill");
-  const target = [FULL[0] - 230, 10, 220, 40];
+  const target = [FULL[0] - 230 + cshift[0], 10 + cshift[1], 220, 40];
   check(near(morphEnd, target), `${theme}: morph surface ends at ${morphEnd}, want ${target}`);
   check(near(pillEnd, target), `${theme}: pill ends at ${pillEnd}, want ${target}`);
   // Simulate the window shrinking around its top-right corner while set_mode runs.
@@ -80,8 +94,10 @@ for (const theme of themes) {
   await page.setViewportSize({ width: COMPACT[0], height: COMPACT[1] });
   await done;
   const after = await rect("#pill");
-  // Screen x: the compact window starts (320 - 240) px to the right of the full one.
-  check(near([after[0] + FULL[0] - COMPACT[0], after[1], after[2], after[3]], target), `${theme}: pill jumps across the resize (${after})`);
+  // Screen x: the compact window starts (320 - 240) px to the right of the full one, plus the clamp shift.
+  check(near([after[0] + FULL[0] - COMPACT[0] + cshift[0], after[1] + cshift[1], after[2], after[3]], target), `${theme}: pill jumps across the resize (${after})`);
+  const focused = await page.evaluate(() => document.activeElement?.id);
+  check(focused === "pill", `${theme}: focus after collapse is on ${focused}, want #pill`);
   const state = await page.evaluate(() => ({ mode: document.documentElement.dataset.mode, cls: document.documentElement.className, calls: window.__TAURI_STUB__.modeCalls.slice(-1)[0] }));
   check(state.mode === "compact" && !/is-(morphing|snapping)/.test(state.cls) && state.calls === "compact", `${theme}: after collapse ${JSON.stringify(state)}`);
   const file = `${theme}__compact.png`;
@@ -107,8 +123,9 @@ for (const theme of themes) {
     row.push({ file: f, label: `expand ${t}ms`, w: FULL[0], h: FULL[1] });
   }
   await finish();
-  const end = await page.evaluate(() => ({ mode: document.documentElement.dataset.mode, cls: document.documentElement.className, shell: getComputedStyle(document.getElementById("shell")).opacity }));
-  check(end.mode === "full" && !/is-(morphing|snapping)/.test(end.cls) && end.shell === "1", `${theme}: after expand ${JSON.stringify(end)}`);
+  const end = await page.evaluate(() => ({ mode: document.documentElement.dataset.mode, cls: document.documentElement.className, shell: getComputedStyle(document.getElementById("shell")).opacity, clip: getComputedStyle(document.getElementById("shell")).clipPath, focus: document.activeElement?.id }));
+  check(end.mode === "full" && !/is-(morphing|snapping)/.test(end.cls) && end.shell === "1" && end.clip === "none", `${theme}: after expand ${JSON.stringify(end)}`);
+  check(end.focus === "tab-stats", `${theme}: focus after expand is on ${end.focus}, want the selected tab`);
   rows.push({ theme, row });
   console.log(`${theme.padEnd(10)} done`);
 }
