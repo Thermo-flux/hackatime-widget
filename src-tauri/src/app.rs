@@ -295,8 +295,20 @@ fn quit_app(app: &AppHandle) {
     app.exit(0);
 }
 
-/// The `–` button. Hides the widget; if there is no tray icon to restore it from, quits instead.
+/// The `–` button: minimises to the taskbar, where its button brings it back. If the OS refuses, hides to the
+/// tray instead (or quits when there is no tray icon to restore it from).
 #[tauri::command]
+fn minimise_window(app: AppHandle, tray: State<HasTray>) {
+    if let Some(w) = app.get_webview_window("main") {
+        app.state::<WindowPlace>().flush();
+        if w.minimize().is_ok() {
+            return;
+        }
+    }
+    hide_window(app, tray);
+}
+
+/// Hides the widget; if there is no tray icon to restore it from, quits instead.
 fn hide_window(app: AppHandle, tray: State<HasTray>) {
     if !tray.0 {
         return quit_app(&app);
@@ -645,7 +657,7 @@ pub fn run() {
             set_api_key,
             set_pomodoro,
             set_quiet_mascot,
-            hide_window,
+            minimise_window,
             quit,
             set_mode,
             #[cfg(debug_assertions)]

@@ -40,8 +40,8 @@ function initTabs() {
   });
 }
 
-// The – hides the widget to the background (the tray icon brings it back); the × quits.
-$("minimise").addEventListener("click", () => invoke("hide_window"));
+// The – minimises to the taskbar; the × quits. (The tray icon also hides and shows the widget.)
+$("minimise").addEventListener("click", () => invoke("minimise_window"));
 $("close").addEventListener("click", () => invoke("quit"));
 // Events from the tray menu (and, with Phase 7, the global hotkey).
 const listen = window.__TAURI__?.event?.listen;

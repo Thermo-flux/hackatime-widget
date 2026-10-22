@@ -99,6 +99,7 @@
       : null,
     get_config: config,
     set_quiet_mascot: () => null,
+    minimise_window: () => null,
     hide_window: () => null,
     set_mode: (a) => setMode(a),
     set_api_key: () => null,
