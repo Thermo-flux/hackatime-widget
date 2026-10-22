@@ -17,10 +17,23 @@ function show(state) {
   $("panel-stats").setAttribute("aria-busy", String(state === "loading"));
 }
 
-function renderLanguages(languages) {
-  const max = Math.max(1, ...languages.map((l) => l.seconds));
+const LIST_KEY = "hackatime-widget.stats-list";
+const LIST_ROWS = 3; // always three, so every theme shows the same amount
+let listKind = (() => {
+  try { return localStorage.getItem(LIST_KEY) === "projects" ? "projects" : "languages"; } catch { return "languages"; }
+})();
+let lastStats = null;
+
+function renderList() {
+  const items = lastStats?.[listKind] ?? [];
+  document.querySelectorAll("#stats-ok .list-toggle__btn").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.list === listKind)));
+  if (items.length === 0) {
+    $("languages").replaceChildren(el("li", { class: "lang lang--none", text: `No ${listKind} yet` }));
+    return;
+  }
+  const max = Math.max(1, ...items.map((l) => l.seconds));
   $("languages").replaceChildren(
-    ...languages.slice(0, 4).map((l) => {
+    ...items.slice(0, LIST_ROWS).map((l) => {
       const fill = el("span", { class: "lang__fill" });
       fill.style.width = `${(l.seconds / max) * 100}%`;
       return el(
@@ -34,6 +47,35 @@ function renderLanguages(languages) {
   );
 }
 
+const PERIODS = {
+  today: { label: "today", before: "yesterday", prev: "Yesterday" },
+  "7d": { label: "last 7 days", before: "previous 7", prev: "Previous 7 days" },
+  "30d": { label: "last 30 days", before: "previous 30", prev: "Previous 30 days" },
+};
+
+/** The muted line under the total: how this period compares with the one before it. No red for less. */
+function renderContext(s) {
+  const p = PERIODS[range];
+  const line = $("total-context");
+  const prev = s.previous_total_seconds;
+  if (!p || prev == null || (prev <= 0 && s.total_seconds <= 0)) {
+    line.hidden = true;
+    return;
+  }
+  line.hidden = false;
+  if (s.total_seconds <= 0) {
+    line.textContent = `${p.prev}: ${fmt(prev)}`;
+    return;
+  }
+  const diff = s.total_seconds - prev;
+  if (Math.abs(diff) < 60) {
+    line.textContent = `${p.label} · same as ${p.before}`;
+    return;
+  }
+  const delta = el("span", { class: diff > 0 ? "total-context__up" : "", text: `${diff > 0 ? "↑" : "↓"} ${fmt(Math.abs(diff))}` });
+  line.replaceChildren(`${p.label} · `, delta, ` vs ${p.before}`);
+}
+
 function render(s) {
   const total = s.total_seconds;
   const known = s.ai_available !== false; // false: the AI figure couldn't be fetched
@@ -41,6 +83,7 @@ function render(s) {
   const human = total > 0 ? 100 - ai : 0;
   const unknown = !known && total > 0; // can't split the bar without the AI figure, so don't claim 100% human
   $("total").textContent = fmt(total);
+  renderContext(s);
   const zero = total <= 0; // nothing to chart: say so once instead of showing empty parts
   $("zero-note").hidden = !zero;
   $("stat-bar").hidden = zero;
@@ -61,7 +104,8 @@ function render(s) {
         ? `${human.toFixed(0)}% human, ${ai.toFixed(0)}% AI`
         : "AI share unavailable",
   );
-  renderLanguages(s.languages);
+  lastStats = s;
+  renderList();
   $("mock-badge").hidden = !s.mock;
   signal("ai", known && total > 0 ? ai : null);
   signal("empty", total === 0);
@@ -198,6 +242,14 @@ export function init() {
   const retryNow = () => { failures = 0; refresh(); };
   $("stale-retry").addEventListener("click", retryNow);
   $("retry").addEventListener("click", retryNow);
+
+  $("stats-ok").querySelector(".list-toggle").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-list]");
+    if (!btn || btn.dataset.list === listKind) return;
+    listKind = btn.dataset.list;
+    try { localStorage.setItem(LIST_KEY, listKind); } catch { /* private mode etc.: just don't remember */ }
+    renderList();
+  });
 
   const keyError = (on) => {
     $("key-error").hidden = !on;

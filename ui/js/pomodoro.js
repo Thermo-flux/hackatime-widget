@@ -1,7 +1,7 @@
 import { $ } from "./lib/dom.js";
-import { mmss } from "./lib/format.js";
+import { mmss, short } from "./lib/format.js";
 import { invoke } from "./lib/tauri.js";
-import { signal, cheer } from "./mascot.js";
+import { signal, cheer, focusEnd } from "./mascot.js";
 
 const LABELS = { focus: "Focus", short_break: "Short break", long_break: "Long break" };
 const CIRCUMFERENCE = 2 * Math.PI * 52;
@@ -10,6 +10,24 @@ const LENGTH_KEY = { focus: "focus_min", short_break: "short_break_min", long_br
 let state = null;
 let poll = null;
 let audio = null;
+let codedPoll = null;
+let coded = null; // { active_secs, elapsed_secs } from the last focus_activity poll, for the running focus phase
+
+/** "coded 14m of 17m": how much of the running focus round had editor activity. Hidden when unknown. */
+function paintCoded() {
+  const line = $("pomo-coded");
+  line.hidden = !coded;
+  if (coded) line.textContent = `coded ${short(coded.active_secs)} of ${short(coded.elapsed_secs)}`;
+}
+
+async function refreshCoded() {
+  if (!state || state.phase !== "focus" || !state.focus_started_at) coded = null;
+  else {
+    try { coded = await invoke("focus_activity"); } catch { coded = null; } // no key, offline...: just say nothing
+  }
+  if (!$("pomo-settings").hidden) return; // the settings view is open; it repaints on close
+  paintCoded();
+}
 
 function chime() {
   try {
@@ -29,8 +47,35 @@ const modeOf = (s) => (s.running ? "running" : s.remaining_secs >= s.total_secs 
 /** The configured length differs from the phase in progress (lengths were changed after it started). */
 const pendingLengths = (s) => s[LENGTH_KEY[s.phase]] * 60 !== s.total_secs;
 
+const MAX_DOTS = 8;
+
+/** One dot per focus session in the current long-break cycle, filled as they finish; many sessions collapse to a count. */
+function renderDots(s) {
+  const done = s.completed_focus;
+  const box = $("pomo-dots");
+  const cycle = s.long_break_every; // 0: no long breaks, so just count today's sessions
+  if (cycle === 0 && done > MAX_DOTS) {
+    box.replaceChildren(`●×${done}`);
+    return;
+  }
+  if (cycle === 0) {
+    box.replaceChildren(...Array.from({ length: done }, () => dotEl(true)));
+    return;
+  }
+  // During the long break the cycle just completed stays full; after it, the row empties for the next one.
+  const filled = done > 0 && done % cycle === 0 && s.phase === "long_break" ? cycle : done % cycle;
+  box.replaceChildren(...Array.from({ length: cycle }, (_, i) => dotEl(i < filled)));
+}
+
+function dotEl(on) {
+  const dot = document.createElement("span");
+  dot.className = on ? "pdot pdot--on" : "pdot";
+  return dot;
+}
+
 function render(s) {
   const prev = state;
+  const round = coded; // the finished round's numbers, before a phase change clears them
   state = s;
   const label = LABELS[s.phase];
   const time = mmss(s.remaining_secs);
@@ -55,16 +100,28 @@ function render(s) {
   bar.style.strokeDasharray = String(CIRCUMFERENCE);
   bar.style.strokeDashoffset = String(CIRCUMFERENCE * (1 - s.remaining_secs / s.total_secs));
 
-  const lengths = `${s.focus_min} / ${s.short_break_min} min`;
-  $("pomo-lengths").textContent = pendingLengths(s) ? `Next: ${lengths}` : lengths;
-  $("pomo-sessions").title = `Focus ${s.focus_min} min, rest ${s.short_break_min} min, long rest ${s.long_break_min} min`;
-  $("pomo-count").textContent = `${s.completed_focus} done`;
+  // The lengths live on the Times button (tooltip, and read out by screen readers); the line under the ring is today's progress.
+  const lengths = `Focus ${s.focus_min} min, rest ${s.short_break_min} min, long rest ${s.long_break_min} min`;
+  const text = pendingLengths(s) ? `${lengths} (from the next phase)` : lengths;
+  $("pomo-lengths").textContent = text;
+  $("pomo-set").title = text;
+  renderDots(s);
+  $("pomo-count").textContent = s.completed_focus > MAX_DOTS ? "today" : `${s.completed_focus} today`; // the dots row already holds the number when it collapses
   document.title = s.running ? `${time} - ${label}` : "Hackatime";
+  if (!prev || prev.focus_started_at !== s.focus_started_at || prev.phase !== s.phase) {
+    if (s.phase !== "focus" || !s.focus_started_at) { coded = null; paintCoded(); }
+    else refreshCoded();
+  }
 
   $("pomo-reset").disabled = mode === "idle" && !pendingLengths(s);
 
   signal("pomo", { running: s.running, phase: s.phase });
-  if (s.finished) {
+  if (s.finished === "focus" && round && round.elapsed_secs > 0) {
+    // How the round went, from the last activity poll (at most a minute old).
+    chime();
+    focusEnd((round.active_secs / round.elapsed_secs) * 100);
+    announce(`${LABELS[s.finished]} done. You coded ${short(round.active_secs)} of ${short(round.elapsed_secs)}. ${label} next, ${mmss(s.total_secs)}.`);
+  } else if (s.finished) {
     chime();
     cheer();
     announce(`${LABELS[s.finished]} done. ${label} next, ${mmss(s.total_secs)}.`);
@@ -77,7 +134,7 @@ const call = (cmd, args) => invoke(cmd, args).then(render);
 
 // ---- Focus / rest length settings ----
 let draft = null;
-const MAIN = ["pomo-phase", "pomo-toggle", "pomo-controls", "pomo-sessions"];
+const MAIN = ["pomo-phase", "pomo-toggle", "pomo-controls", "pomo-sessions", "pomo-coded"];
 const ROWS = () => document.querySelectorAll("#pomo-settings .stepper");
 const same = (a, b) => a.focus_min === b.focus_min && a.short_break_min === b.short_break_min && a.long_break_min === b.long_break_min;
 const current = () => ({ focus_min: state.focus_min, short_break_min: state.short_break_min, long_break_min: state.long_break_min });
@@ -120,6 +177,7 @@ function paintSettings() {
 function showSettings(open) {
   $("pomo-settings").hidden = !open;
   for (const id of MAIN) $(id).hidden = open;
+  if (!open) paintCoded(); // hidden again unless there is something to show
   $("pomo-set").setAttribute("aria-expanded", String(open));
   $("panel-pomodoro").classList.toggle("is-editing", open);
   if (open) document.querySelector('#pomo-settings [role="spinbutton"]').focus();
@@ -230,11 +288,13 @@ function initSettings() {
   $("pomo-save").addEventListener("click", save);
 }
 
-export const pause = () => { clearInterval(poll); poll = null; };
+export const pause = () => { clearInterval(poll); clearInterval(codedPoll); poll = codedPoll = null; };
 export function resume() {
   call("pomodoro_state");
   clearInterval(poll);
   poll = setInterval(() => call("pomodoro_state"), 1000);
+  clearInterval(codedPoll);
+  codedPoll = setInterval(refreshCoded, 60_000);
 }
 
 export function init() {

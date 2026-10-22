@@ -6,7 +6,7 @@ use crate::error::Result;
 use crate::pomodoro::{Pomodoro, Snapshot};
 use crate::sessions::{self, SessionStore, Summary};
 use crate::stats::Stats;
-use crate::{activity, api, cache};
+use crate::{activity, api, cache, focus_day};
 use chrono::{FixedOffset, Local, Utc};
 use serde::Serialize;
 use std::sync::Mutex;
@@ -14,9 +14,61 @@ use std::time::Instant;
 use tauri::State;
 
 /// Held in Tauri state so the timer keeps running if the UI reloads.
-struct Timer(Mutex<Pomodoro>);
+struct Timer {
+    state: Mutex<Pomodoro>,
+    /// Sample-data mode never writes files, so today's count stays in memory there.
+    persist: bool,
+    /// Wall-clock start of the running focus phase, fixed when first seen. Recomputing it from the
+    /// clock on every call would wobble by a second and look like a new phase to the UI and the cache.
+    began_unix: Mutex<Option<(Instant, i64)>>,
+}
+
+impl Timer {
+    /// Runs `act` on the timer, then returns its snapshot. Rolls the day over first, and saves
+    /// today's count whenever it changed.
+    fn with(&self, act: impl FnOnce(&mut Pomodoro, Instant)) -> Snapshot {
+        let now = Instant::now();
+        let today = Local::now().date_naive();
+        let mut t = self.state.lock().unwrap();
+        let before = (t.completed_focus(), t.roll_day(today));
+        act(&mut t, now);
+        let mut snap = t.snapshot(now);
+        let mut known = self.began_unix.lock().unwrap();
+        snap.focus_started_at = match t.focus_began() {
+            None => {
+                *known = None;
+                None
+            }
+            Some(began) => {
+                let unix = match *known {
+                    Some((at, unix)) if at == began => unix,
+                    _ => Utc::now().timestamp() - now.saturating_duration_since(began).as_secs() as i64,
+                };
+                *known = Some((began, unix));
+                Some(unix)
+            }
+        };
+        drop(known);
+        if self.persist && (snap.completed_focus != before.0 || before.1) {
+            // The count is a convenience: failing to save it must not break the timer.
+            let _ = focus_day::save(&config::data_path("pomodoro-day.json"), today, snap.completed_focus);
+        }
+        snap
+    }
+}
 
 struct Sessions(Mutex<SessionStore>);
+
+/// Heartbeats for the running focus phase. Separate from `Heartbeats` (which belongs to a session)
+/// so the two never evict each other's window.
+struct FocusBeats(Mutex<activity::HeartbeatCache>);
+
+/// How much of the running focus phase was spent coding.
+#[derive(Serialize)]
+struct FocusActivity {
+    elapsed_secs: i64,
+    active_secs: f64,
+}
 
 /// Heartbeats already downloaded for the running session (see `activity::poll`).
 struct Heartbeats(Mutex<activity::HeartbeatCache>);
@@ -123,9 +175,7 @@ fn set_api_key(key: String) -> Result<()> {
 #[tauri::command]
 fn set_pomodoro(timer: State<Timer>, lengths: PomodoroLengths) -> Result<Snapshot> {
     let saved = config::save_lengths(lengths)?;
-    let mut t = timer.0.lock().unwrap();
-    t.set_config(saved);
-    Ok(t.snapshot(Instant::now()))
+    Ok(timer.with(|t, _| t.set_config(saved)))
 }
 
 /// The window is frameless and off the taskbar, so the UI needs its own way to quit.
@@ -136,35 +186,36 @@ fn quit(app: tauri::AppHandle) {
 
 #[tauri::command]
 fn pomodoro_state(timer: State<Timer>) -> Snapshot {
-    timer.0.lock().unwrap().snapshot(Instant::now())
+    timer.with(|_, _| {})
+}
+
+/// Coding activity since the current focus phase started, or `None` when none is running.
+#[tauri::command]
+async fn focus_activity(timer: State<'_, Timer>, beats: State<'_, FocusBeats>) -> Result<Option<FocusActivity>> {
+    let Some(start) = timer.with(|_, _| {}).focus_started_at else { return Ok(None) };
+    let now = Utc::now().timestamp();
+    let live = activity::for_session(&config::load(), &beats.0, start, now).await?;
+    Ok(Some(FocusActivity { elapsed_secs: (now - start).max(0), active_secs: live.active_secs }))
 }
 
 #[tauri::command]
 fn pomodoro_start(timer: State<Timer>) -> Snapshot {
-    let mut t = timer.0.lock().unwrap();
-    t.start(Instant::now());
-    t.snapshot(Instant::now())
+    timer.with(|t, now| t.start(now))
 }
 
 #[tauri::command]
 fn pomodoro_pause(timer: State<Timer>) -> Snapshot {
-    let mut t = timer.0.lock().unwrap();
-    t.pause(Instant::now());
-    t.snapshot(Instant::now())
+    timer.with(|t, now| t.pause(now))
 }
 
 #[tauri::command]
 fn pomodoro_reset(timer: State<Timer>) -> Snapshot {
-    let mut t = timer.0.lock().unwrap();
-    t.reset();
-    t.snapshot(Instant::now())
+    timer.with(|t, _| t.reset())
 }
 
 #[tauri::command]
 fn pomodoro_skip(timer: State<Timer>) -> Snapshot {
-    let mut t = timer.0.lock().unwrap();
-    t.skip(Instant::now());
-    t.snapshot(Instant::now())
+    timer.with(|t, now| t.skip(now))
 }
 
 pub fn run() {
@@ -176,11 +227,15 @@ pub fn run() {
         SessionStore::load(config::data_path("sessions.json"))
     };
 
+    let today = Local::now().date_naive();
+    let saved_count = if cfg.mock { 0 } else { focus_day::load(&config::data_path("pomodoro-day.json"), today) };
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(Timer(Mutex::new(Pomodoro::new(cfg.pomodoro))))
+        .manage(Timer { state: Mutex::new(Pomodoro::new(cfg.pomodoro, today, saved_count)), persist: !cfg.mock, began_unix: Mutex::new(None) })
         .manage(Sessions(Mutex::new(store)))
         .manage(Heartbeats(Mutex::new(activity::HeartbeatCache::default())))
+        .manage(FocusBeats(Mutex::new(activity::HeartbeatCache::default())))
         .setup(|app| {
             // Keep WebView2/WebKit data beside the config instead of in the OS app-data dir.
             let data_dir = config::data_path("webview-data");
@@ -204,6 +259,7 @@ pub fn run() {
             session_start,
             session_stop,
             pomodoro_state,
+            focus_activity,
             pomodoro_start,
             pomodoro_pause,
             pomodoro_reset,

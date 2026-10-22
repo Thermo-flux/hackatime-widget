@@ -8,6 +8,7 @@ mod cache;
 mod app;
 mod config;
 mod error;
+mod focus_day;
 mod fsutil;
 mod pomodoro;
 mod sessions;

@@ -1,13 +1,13 @@
 // Screenshots every scenario x theme x tab at the real widget size (320x436 @2x, transparent), then builds one
 // contact sheet per scenario. Needs only Node + Playwright's Chromium; no Tauri, any OS.
-//   node tools/preview/shots.mjs out/ [--scenarios normal,zero] [--themes classic,phosphor] [--tabs stats,sessions]
+//   node tools/preview/shots.mjs out/ [--scenarios normal,zero] [--themes classic,phosphor] [--tabs stats,sessions] [--list projects]
 import { mkdirSync, writeFileSync } from "node:fs";
 import { chromium } from "playwright";
 import { startServer } from "./serve.mjs";
 
 export const SCENARIOS = [
   "normal", "no_key", "unauthorized", "offline", "offline_cached", "zero", "ai_unavailable", "huge", "session_live",
-  "session_live_noactivity", "sessions_empty", "pomo_running", "pomo_paused", "pomo_break", "mock",
+  "session_live_noactivity", "sessions_empty", "pomo_running", "pomo_paused", "pomo_break", "pomo_many", "pomo_nolong", "pomo_finishing", "pomo_finishing_low", "down", "mock",
 ];
 const TABS = ["stats", "sessions", "pomodoro"];
 
@@ -24,6 +24,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const scenarios = flag("scenarios") ?? SCENARIOS;
 const tabs = flag("tabs") ?? TABS;
+const list = flag("list")?.[0]; // "projects" to show the Projects list on the Stats tab
 const written = {};
 
 for (const scenario of scenarios) {
@@ -38,6 +39,7 @@ for (const scenario of scenarios) {
     for (const tab of tabs) {
       await page.click(`#tab-${tab}`);
       if (tab === "stats" && scenario === "huge") await page.click('[data-range="all"]'); // widest strings: All-time
+      if (tab === "stats" && list) await page.click(`[data-list="${list}"]`);
       await sleep(350);
       const file = `${scenario}__${theme}__${tab}.png`;
       await page.screenshot({ path: `${out}/${file}`, omitBackground: true });

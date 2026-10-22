@@ -248,6 +248,15 @@
 .banner[hidden] { display: none; }
 .link-btn { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
 .link-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.list-toggle { display: flex; gap: var(--space-3); margin-bottom: 0; }
+.list-toggle__btn {
+  padding: 0; border: 0; border-bottom: 2px solid transparent; background: none;
+  color: var(--muted); font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer;
+}
+.list-toggle__btn:hover { color: var(--fg); }
+.list-toggle__btn[aria-pressed="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.list-toggle__btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.lang--none { color: var(--muted); }
 .langs__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
 .updated { color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
 .updated:empty { display: none; }

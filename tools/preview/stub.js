@@ -9,12 +9,12 @@
   const LANGS = [slice("Rust", 2.5 * H), slice("TypeScript", 1.8 * H), slice("CSS", 1.2 * H), slice("Markdown", 0.5 * H)];
   const PROJECTS = [slice("hackatime-widget", 3.4 * H), slice("portfolio-site", 1.9 * H), slice("dotfiles", 0.7 * H)];
 
-  function stats(total, ai, { languages = LANGS, projects = PROJECTS, aiAvailable = true, mock = false } = {}) {
+  function stats(total, ai, { languages = LANGS, projects = PROJECTS, aiAvailable = true, mock = false, prev = null } = {}) {
     const aiSecs = aiAvailable ? ai : 0;
     return {
       total_seconds: total, ai_seconds: aiSecs, human_seconds: total - aiSecs,
       ai_percent: total > 0 ? (aiSecs / total) * 100 : 0,
-      categories: [], languages, projects, mock, ai_available: aiAvailable,
+      categories: [], languages, projects, mock, ai_available: aiAvailable, previous_total_seconds: prev,
     };
   }
 
@@ -22,14 +22,15 @@
   const statsFor = (range) => {
     const k = RANGE_SCALE[range] ?? 1;
     switch (scenario) {
-      case "zero": return stats(0, 0, { languages: [], projects: [] });
+      case "zero": return stats(0, 0, { languages: [], projects: [], prev: 4.2 * H * k });
+      case "down": return stats(6.25 * H * k, 2.25 * H * k, { prev: 9.5 * H * k });
       case "ai_unavailable": return stats(6.25 * H * k, 0, { aiAvailable: false });
       case "huge": return stats((999 * H + 59 * 60 + 412 * H), 412 * H, {
         languages: [slice("TypeScript React (TSX)", 300 * H), slice("Jupyter Notebook (Python)", 200 * H), slice("C++ (Objective)", 90 * H), slice("Markdown", 30 * H)],
         projects: [slice("a-very-long-project-name-for-testing", 500 * H), slice("monorepo/apps/web-dashboard", 300 * H), slice("dotfiles", 100 * H)],
       });
       case "mock": return stats(6.25 * H * k, 2.25 * H * k, { mock: true });
-      default: return stats(6.25 * H * k, 2.25 * H * k);
+      default: return stats(6.25 * H * k, 2.25 * H * k, { prev: range === "all" ? null : 5.1 * H * k });
     }
   };
 
@@ -55,10 +56,19 @@
   };
 
   const POMO = { focus_min: 25, short_break_min: 5, long_break_min: 15 };
+  let pomoCalls = 0;
   const pomo = () => {
-    const base = { running: false, completed_focus: 2, finished: null, ...POMO };
+    pomoCalls += 1;
+    const base = { running: false, focus_started_at: null, completed_focus: scenario === "pomo_many" ? 12 : 2, long_break_every: 4, finished: null, ...POMO };
     switch (scenario) {
-      case "pomo_running": return { ...base, phase: "focus", running: true, remaining_secs: 17 * 60 + 23, total_secs: 1500 };
+      case "pomo_running": return { ...base, focus_started_at: Math.floor(Date.now() / 1000) - 17 * 60, phase: "focus", running: true, remaining_secs: 17 * 60 + 23, total_secs: 1500 };
+      // A focus round that ends on the third poll: the phase-end line depends on how much of it was coded.
+      case "pomo_finishing": case "pomo_finishing_low": {
+        if (pomoCalls < 3) return { ...base, focus_started_at: Math.floor(Date.now() / 1000) - 17 * 60, phase: "focus", running: true, remaining_secs: 5, total_secs: 1500 };
+        return { ...base, phase: "short_break", remaining_secs: 300, total_secs: 300, completed_focus: 3, finished: pomoCalls === 3 ? "focus" : null };
+      }
+      case "pomo_nolong": return { ...base, long_break_every: 0, completed_focus: 3, phase: "focus", remaining_secs: 1500, total_secs: 1500 };
+      case "pomo_many": return { ...base, phase: "focus", remaining_secs: 1500, total_secs: 1500 };
       case "pomo_paused": return { ...base, phase: "focus", remaining_secs: 9 * 60 + 40, total_secs: 1500 };
       case "pomo_break": return { ...base, phase: "short_break", running: true, remaining_secs: 3 * 60 + 12, total_secs: 300 };
       default: return { ...base, phase: "focus", remaining_secs: 1500, total_secs: 1500 };
@@ -90,6 +100,10 @@
     session_state: sessionView,
     session_start: () => null,
     session_stop: () => true,
+    focus_activity: () => {
+      const coded = { pomo_running: 14, pomo_finishing: 15, pomo_finishing_low: 3 }[scenario];
+      return coded === undefined ? null : { elapsed_secs: 17 * 60, active_secs: coded * 60 };
+    },
     pomodoro_state: pomo, pomodoro_start: pomo, pomodoro_pause: pomo, pomodoro_reset: pomo, pomodoro_skip: pomo,
   };
 

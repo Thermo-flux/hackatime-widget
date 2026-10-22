@@ -66,6 +66,19 @@ impl Range {
         }
     }
 
+    /// The equally long period just before this one, as `(first day, day after the last)`.
+    /// `None` for All time, which has nothing before it.
+    fn previous_window(self, today: NaiveDate) -> Option<(NaiveDate, NaiveDate)> {
+        let len = match self {
+            Self::Today => 1,
+            Self::Last7 => 7,
+            Self::Last30 => 30,
+            Self::AllTime => return None,
+        };
+        let this_start = self.start_on(today)?;
+        Some((this_start - Duration::days(len), this_start))
+    }
+
     /// First local day of the range; `None` means "from the beginning" (the API defaults to 10 years).
     fn start(self) -> Option<NaiveDate> {
         self.start_on(Local::now().date_naive())
@@ -91,12 +104,20 @@ pub fn origin(base_url: &str) -> String {
     }
 }
 
+/// The first moment of `day` in `tz`. Where a DST change skips midnight, that is the first hour that
+/// exists, never "now": a wrong boundary would make the two periods overlap.
+fn day_start<Tz: TimeZone>(tz: &Tz, day: NaiveDate) -> chrono::DateTime<Tz> {
+    (0..24)
+        .find_map(|h| tz.from_local_datetime(&day.and_hms_opt(h, 0, 0).unwrap()).earliest())
+        .unwrap_or_else(|| tz.from_utc_datetime(&day.and_hms_opt(0, 0, 0).unwrap()))
+}
+
+fn local_midnight(day: NaiveDate) -> chrono::DateTime<Local> {
+    day_start(&Local, day)
+}
+
 fn local_midnight_iso(day: NaiveDate) -> String {
-    Local
-        .from_local_datetime(&day.and_hms_opt(0, 0, 0).unwrap())
-        .earliest()
-        .unwrap_or_else(Local::now)
-        .to_rfc3339()
+    local_midnight(day).to_rfc3339()
 }
 
 async fn get_json<T: DeserializeOwned>(http: &reqwest::Client, cfg: &Config, path: &str, query: &[(&str, String)]) -> Result<T> {
@@ -150,7 +171,13 @@ fn mock_stats(range: Range) -> Result<Stats> {
         let last = resp.data.pop();
         resp.data = last.into_iter().collect();
     }
-    Ok(Stats { mock: true, ..aggregate(resp) })
+    // Today's sample compares with the day before it, so demo mode shows the comparison line too.
+    let previous = matches!(range, Range::Today).then(|| {
+        let full: SummariesResponse = serde_json::from_str(SAMPLE).ok()?;
+        let n = full.data.len().checked_sub(2)?;
+        Some(full.data[n].grand_total.total_seconds)
+    });
+    Ok(Stats { mock: true, previous_total_seconds: previous.flatten(), ..aggregate(resp) })
 }
 
 pub async fn fetch_stats(cfg: &Config, range: Range) -> Result<Stats> {
@@ -174,16 +201,30 @@ async fn fetch_stats_with(http: &reqwest::Client, cfg: &Config, range: Range) ->
     let detail_q = with(&[("features", "languages,projects")]);
     const PATH: &str = "/api/v1/users/my/stats";
 
-    let (total, ai, detail) = tokio::join!(
+    let prev_q = range.previous_window(Local::now().date_naive()).map(|(from, until)| {
+        vec![
+            ("start_date", local_midnight_iso(from)),
+            // The last second of the final day, so the next period's first moment isn't counted twice.
+            ("end_date", (local_midnight(until) - Duration::seconds(1)).to_rfc3339()),
+            ("total_seconds", "true".to_string()),
+        ]
+    });
+    let (total, ai, detail, prev) = tokio::join!(
         get_json::<TotalResponse>(http, cfg, PATH, &total_q),
         get_json::<TotalResponse>(http, cfg, PATH, &ai_q),
         get_json::<StatsEnvelope>(http, cfg, PATH, &detail_q),
+        async {
+            match &prev_q {
+                Some(q) => get_json::<TotalResponse>(http, cfg, PATH, q).await.ok().map(|t| t.total_seconds),
+                None => None,
+            }
+        },
     );
     let total = total?.total_seconds;
     let detail = detail?.data;
     // The AI figure is a bonus: if that one call fails, keep the rest and mark AI as unavailable.
     let ai = ai.ok().map(|t| t.total_seconds);
-    Ok(Stats::from_parts(total, ai, slices(detail.languages), slices(detail.projects)))
+    Ok(Stats { previous_total_seconds: prev, ..Stats::from_parts(total, ai, slices(detail.languages), slices(detail.projects)) })
 }
 
 /// Raw heartbeats between two unix timestamps.
@@ -196,6 +237,55 @@ pub async fn fetch_heartbeats(cfg: &Config, from: i64, to: i64) -> Result<Vec<He
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn d(y: i32, m: u32, day: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(y, m, day).unwrap()
+    }
+
+    #[test]
+    fn the_previous_period_is_the_same_length_right_before() {
+        let today = d(2026, 10, 21);
+        assert_eq!(Range::Today.previous_window(today), Some((d(2026, 10, 20), d(2026, 10, 21))));
+        assert_eq!(Range::Last7.previous_window(today), Some((d(2026, 10, 8), d(2026, 10, 15))));
+        assert_eq!(Range::Last30.previous_window(today), Some((d(2026, 8, 23), d(2026, 9, 22))));
+        assert_eq!(Range::AllTime.previous_window(today), None);
+    }
+
+    #[test]
+    fn previous_windows_cross_month_year_and_leap_boundaries() {
+        // 7d on 3 Mar 2024 covers 26 Feb..3 Mar; before it is 19..25 Feb.
+        assert_eq!(Range::Last7.previous_window(d(2024, 3, 3)), Some((d(2024, 2, 19), d(2024, 2, 26))));
+        // Today on 1 Jan looks at 31 Dec.
+        assert_eq!(Range::Today.previous_window(d(2026, 1, 1)), Some((d(2025, 12, 31), d(2026, 1, 1))));
+        // 30d on 15 Mar 2026: this is 14 Feb..15 Mar, before it is 15 Jan..13 Feb.
+        assert_eq!(Range::Last30.previous_window(d(2026, 3, 15)), Some((d(2026, 1, 15), d(2026, 2, 14))));
+    }
+
+    #[test]
+    fn a_day_starts_at_its_own_midnight() {
+        let tz = chrono::FixedOffset::east_opt(2 * 3600).unwrap();
+        let start = day_start(&tz, d(2026, 3, 29));
+        assert_eq!(start.to_rfc3339(), "2026-03-29T00:00:00+02:00");
+        // Midnight to midnight is 24 hours in a zone without a DST change.
+        assert_eq!((day_start(&tz, d(2026, 3, 30)) - start).num_hours(), 24);
+    }
+
+    // `day_start` steps to the first existing hour where DST skips midnight; chrono has no zone
+    // database in this build, so that branch can't be exercised here without adding a dependency.
+
+    #[test]
+    fn previous_windows_are_whole_calendar_days_across_dst() {
+        // Spring-forward and fall-back days are 23/25 hours long, so windows are built from dates, not
+        // from 24-hour steps: every window still starts on a date and spans a whole number of days.
+        for today in [d(2026, 3, 9), d(2026, 3, 30), d(2026, 11, 2), d(2026, 10, 26)] {
+            for r in [Range::Today, Range::Last7, Range::Last30] {
+                let (from, until) = r.previous_window(today).unwrap();
+                assert_eq!(until, r.start_on(today).unwrap());
+                let days = (until - from).num_days();
+                assert_eq!(days, match r { Range::Today => 1, Range::Last7 => 7, _ => 30 });
+            }
+        }
+    }
     use std::sync::{Arc, Mutex};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
@@ -292,7 +382,7 @@ mod tests {
         let (url, log) = serve(vec![("total_seconds=true", "200 OK", r#"{"total_seconds":0}"#), ("features=", "200 OK", "{}")]).await;
         fetch_stats(&cfg(&url, "secret", false), Range::Today).await.unwrap();
         let log = log.lock().unwrap();
-        assert_eq!(log.len(), 3, "total, AI and breakdown requests");
+        assert_eq!(log.len(), 4, "total, AI, breakdown and previous-period requests");
         for req in log.iter() {
             assert!(req.starts_with("GET /api/v1/users/my/stats?"), "{req}");
             assert!(req.contains("start_date=") && req.contains("end_date="), "{req}");
@@ -301,6 +391,38 @@ mod tests {
         let ai = log.iter().find(|r| r.contains("filter_by_category")).expect("an AI request");
         assert!(ai.contains("filter_by_category=ai%20coding") || ai.contains("filter_by_category=ai+coding"), "{ai}");
         assert!(ai.contains("total_seconds=true"));
+    }
+
+    #[tokio::test]
+    async fn the_previous_period_total_is_fetched_with_its_own_window() {
+        let (url, log) = serve(vec![("total_seconds=true", "200 OK", r#"{"total_seconds":900}"#), ("features=", "200 OK", "{}")]).await;
+        let s = fetch_stats(&cfg(&url, "k", false), Range::Last7).await.unwrap();
+        assert_eq!(s.previous_total_seconds, Some(900.0));
+        let log = log.lock().unwrap();
+        let starts: std::collections::HashSet<&str> =
+            log.iter().filter_map(|r| r.split("start_date=").nth(1)).filter_map(|r| r.split(['&', ' ']).next()).collect();
+        assert_eq!(starts.len(), 2, "this period and the previous one start on different days: {starts:?}");
+    }
+
+    #[tokio::test]
+    async fn a_failing_previous_call_just_drops_the_comparison() {
+        // The previous-period request is the only one with an end_date at 23:59:59.
+        let (url, _) = serve(vec![
+            ("T23%3A59%3A59", "500 Internal Server Error", "{}"),
+            ("total_seconds=true", "200 OK", r#"{"total_seconds":3600}"#),
+            ("features=", "200 OK", DETAIL),
+        ])
+        .await;
+        let s = fetch_stats(&cfg(&url, "k", false), Range::Today).await.unwrap();
+        assert_eq!((s.total_seconds, s.previous_total_seconds), (3600.0, None));
+    }
+
+    #[tokio::test]
+    async fn all_time_has_no_comparison_and_no_extra_request() {
+        let (url, log) = serve(vec![("total_seconds=true", "200 OK", r#"{"total_seconds":5}"#), ("features=", "200 OK", "{}")]).await;
+        let s = fetch_stats(&cfg(&url, "k", false), Range::AllTime).await.unwrap();
+        assert_eq!(s.previous_total_seconds, None);
+        assert_eq!(log.lock().unwrap().len(), 3);
     }
 
     #[tokio::test]

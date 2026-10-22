@@ -37,6 +37,7 @@
 
       <div id="stats-ok" class="view" hidden>
         <div class="total tabular" id="total">0m</div>
+        <p class="total-context" id="total-context" hidden></p>
         <div class="stat-bar" id="stat-bar" role="img" aria-label="No data">
           <span class="stat-bar__human" id="bar-human"></span>
           <span class="stat-bar__ai" id="bar-ai"></span>
@@ -49,7 +50,10 @@
         <p class="notice" id="zero-note" hidden>Nothing yet. Time shows up here as your editor reports to Hackatime.</p>
         <div class="langs">
           <div class="langs__head">
-            <h2 class="section-title">Top languages</h2>
+            <div class="list-toggle section-title" role="group" aria-label="Show top">
+              <button class="list-toggle__btn" type="button" data-list="languages" aria-pressed="true">Languages</button>
+              <button class="list-toggle__btn" type="button" data-list="projects" aria-pressed="false">Projects</button>
+            </div>
             <span class="updated" id="updated"></span>
           </div>
           <ul id="languages"></ul>
@@ -110,7 +114,7 @@
         </div>
         <div class="legend legend--one" id="live-legend-unknown" hidden>AI share unavailable</div>
         <div class="tiles">
-          <div class="tile"><div class="tile__value tabular" id="live-coding">–</div><div class="tile__label">Coding</div></div>
+          <div class="tile"><div class="tile__value tabular" id="live-idle">–</div><div class="tile__label">Idle</div></div>
           <div class="tile"><div class="tile__value tabular" id="live-focus">–</div><div class="tile__label">Focus</div></div>
           <div class="tile"><div class="tile__value tabular" id="live-today">–</div><div class="tile__label tile__label--wrap">Sessions today</div></div>
         </div>
@@ -144,7 +148,8 @@
         <button class="btn btn--ghost" id="pomo-skip" type="button" title="Go to the next phase">Skip</button>
         <button class="btn btn--ghost" id="pomo-set" type="button" aria-expanded="false" aria-controls="pomo-settings" aria-describedby="pomo-lengths">Times</button>
       </div>
-      <p class="sessions" id="pomo-sessions"><span id="pomo-lengths">25 / 5 min</span> · <span id="pomo-count">0 done</span></p>
+      <p class="sessions" id="pomo-sessions"><span class="pdots" id="pomo-dots" aria-hidden="true"></span><span id="pomo-count">0 today</span><span class="sr-only" id="pomo-lengths">Focus 25 min, rest 5 min</span></p>
+      <p class="sessions" id="pomo-coded" hidden></p>
       <p class="sr-only" id="pomo-status" aria-live="polite"></p>
 
       <div class="pomo-settings" id="pomo-settings" role="group" aria-labelledby="pomo-settings-title" hidden>
