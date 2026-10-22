@@ -15,7 +15,7 @@ pub struct Config {
     pub refresh_secs: u64,
     /// Serve bundled sample data instead of calling the API.
     pub mock: bool,
-    /// The mascot keeps its faces but never shows a speech bubble.
+    /// The mascot keeps its faces but only speaks when petted.
     pub quiet_mascot: bool,
     pub pomodoro: PomodoroConfig,
 }

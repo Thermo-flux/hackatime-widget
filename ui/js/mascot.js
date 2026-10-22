@@ -83,6 +83,9 @@ let quiet = false; // quiet_mascot: expressions only, never a speech bubble
 
 /** Moods that come with a line when they begin: a Pomodoro phase change or something to fix. Others stay silent. */
 const SPEAKS = new Set(["focus", "break", "no_key", "offline"]);
+/** What a quiet mascot still says: the answer to being petted. */
+const PET = new Set(["poke", "pokeMore", "dizzy", "love", "wake"]);
+const BAD = new Set(["no_key", "offline", "error"]);
 const signals = { no_key: false, offline: false, error: false, pomo: null, session: false, ai: null, streak: 0, empty: false };
 
 /** Paint a sprite with an optional list of expression patches applied in order. */
@@ -139,7 +142,7 @@ let fadeTimer = null;
 let goneTimer = null;
 /** Speaks a line. Only called for events (see SPEAKS and the reactions); the bubble collapses once it has faded. */
 function say(kind) {
-  if (!theme?.sprite || quiet) return;
+  if (!theme?.sprite || (quiet && !PET.has(kind))) return;
   const bubble = $("mascot-say");
   lastText = nextLine(kind);
   bubble.textContent = lastText;
@@ -200,11 +203,13 @@ function evaluate() {
   else if (ai !== null) next = "human";
   else if (streak >= 3) next = "streak";
   if (next === mood) return;
+  const recovered = BAD.has(mood) && !BAD.has(next);
   mood = next;
   $("mascot-bar").dataset.mood = mood;
   if (mood === "error") { react("error"); return; } // grumpy first, then the sad mood face
   render();
-  if (SPEAKS.has(mood)) say(mood);
+  if (recovered) react("connected");
+  else if (SPEAKS.has(mood)) say(mood);
 }
 
 /** Report something the mascot should react to: no_key, offline, error, empty, pomo, session, ai, streak. */
