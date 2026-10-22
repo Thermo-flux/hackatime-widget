@@ -614,6 +614,10 @@ pub fn run() {
                 .data_directory(data_dir)
                 .inner_size(lw, lh)
                 .visible(!hidden);
+            // The taskbar / dock / alt-tab icon is the same image as the tray icon on every platform.
+            if let Some(icon) = app.default_window_icon() {
+                window = window.icon(icon.clone())?;
+            }
             if let Some(p) = launch {
                 window = window.position(modes::to_logical(p.pos.0 as i64, p.scale), modes::to_logical(p.pos.1 as i64, p.scale));
             }
