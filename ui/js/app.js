@@ -6,6 +6,7 @@ import * as sessions from "./sessions.js";
 import * as mascot from "./mascot.js";
 import * as themes from "./themes.js";
 import { fitTiles } from "./fit.js";
+import * as compact from "./compact.js";
 import * as mode from "./mode.js";
 import * as pill from "./pill.js";
 
@@ -65,4 +66,6 @@ document.addEventListener("visibilitychange", () => {
   hidden ? stats.pause() : stats.resume();
   hidden ? sessions.pause() : sessions.resume();
   hidden ? pomodoro.pause() : pomodoro.resume();
+  if (hidden) compact.stop();
+  else if (mode.getMode() === "compact") compact.start(); // the pill's own timers
 });

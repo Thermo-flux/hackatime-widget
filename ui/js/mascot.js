@@ -149,12 +149,13 @@ function say(kind) {
 /** Says a one-off line that isn't part of any theme's repertoire (a tip). Silent when quiet. Returns whether it spoke. */
 export function tell(text) {
   if (!theme?.sprite || quiet) return false;
-  show(text);
+  show(text, true);
   return true;
 }
 
-function show(text) {
+function show(text, tip = false) {
   const bubble = $("mascot-say");
+  bubble.classList.toggle("is-tip", tip); // a tip may wrap onto a second line instead of being cut off
   lastText = text;
   bubble.textContent = lastText;
   bubble.classList.remove("is-faded", "is-gone");

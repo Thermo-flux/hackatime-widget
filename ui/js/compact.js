@@ -9,7 +9,6 @@ import * as themes from "./themes.js";
 import * as pomodoro from "./pomodoro.js";
 import * as sessions from "./sessions.js";
 
-const DAY_POLL_MS = 60_000;
 const ACTIVE_POLL_MS = 60_000;
 const PHASE_NAME = { focus: "Focus", short_break: "Break", long_break: "Long break" };
 
@@ -80,15 +79,18 @@ async function refreshActive() {
   render();
 }
 
-/** Start refreshing; call when the pill appears. */
-export function start() {
+/** Start refreshing; call when the pill appears. The Day total follows the same interval as the Stats tab. */
+export async function start() {
   if (running) return;
   running = true;
   paintMascot();
   render();
   refreshDay();
   refreshActive();
-  timers = [setInterval(refreshDay, DAY_POLL_MS), setInterval(refreshActive, ACTIVE_POLL_MS), setInterval(render, 1000)];
+  let dayMs = 300_000;
+  try { dayMs = Math.max(30, (await invoke("get_config")).refresh_secs) * 1000; } catch { /* the default will do */ }
+  if (!running || timers.length) return; // stopped (or restarted) while the config loaded
+  timers = [setInterval(refreshDay, dayMs), setInterval(refreshActive, ACTIVE_POLL_MS), setInterval(render, 1000)];
 }
 
 /** Stop everything; call when the pill goes away or the window is hidden. */

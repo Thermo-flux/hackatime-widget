@@ -37,6 +37,7 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; /* one line, whatever the theme's font */
   transition: opacity 0.4s;
 }
+.mascot-say.is-tip { white-space: normal; overflow: visible; }
 .mascot-say.is-faded { opacity: 0; }
 .mascot-say:empty, .mascot-say.is-gone { display: none; }
 .mascot-bar[data-has-sprite="false"] .mascot-btn { display: none; }
