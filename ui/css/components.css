@@ -78,6 +78,7 @@
 }
 .btn--primary:hover:not(:disabled) { background: var(--phase-color, var(--accent)); filter: brightness(1.08); }
 .btn--ghost { border-color: transparent; color: var(--muted); }
+.btn--icon { padding: 0; width: 32px; min-width: 32px; display: inline-grid; place-items: center; }
 .btn.is-reserved { visibility: hidden; }
 
 .icon-btn {

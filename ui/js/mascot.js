@@ -79,7 +79,10 @@ let pomoPrev = null;
 let lastEnded = null; // the Pomodoro phase that ended most recently
 let sessionSince = 0;
 let longSessionSaid = false;
-let everLoaded = false;
+let quiet = false; // quiet_mascot: expressions only, never a speech bubble
+
+/** Moods that come with a line when they begin: a Pomodoro phase change or something to fix. Others stay silent. */
+const SPEAKS = new Set(["focus", "break", "no_key", "offline"]);
 const signals = { no_key: false, offline: false, error: false, pomo: null, session: false, ai: null, streak: 0, empty: false };
 
 /** Paint a sprite with an optional list of expression patches applied in order. */
@@ -133,15 +136,30 @@ function nextLine(kind) {
 }
 
 let fadeTimer = null;
+let goneTimer = null;
+/** Speaks a line. Only called for events (see SPEAKS and the reactions); the bubble collapses once it has faded. */
 function say(kind) {
-  if (!theme?.sprite) return;
+  if (!theme?.sprite || quiet) return;
   const bubble = $("mascot-say");
   lastText = nextLine(kind);
   bubble.textContent = lastText;
-  bubble.classList.remove("is-faded");
+  bubble.classList.remove("is-faded", "is-gone");
   lastSaid = Date.now();
   clearTimeout(fadeTimer);
-  fadeTimer = setTimeout(() => bubble.classList.add("is-faded"), 9000);
+  clearTimeout(goneTimer);
+  fadeTimer = setTimeout(() => {
+    bubble.classList.add("is-faded");
+    goneTimer = setTimeout(() => bubble.classList.add("is-gone"), 450);
+  }, 9000);
+}
+
+/** quiet_mascot: the mascot keeps its faces but stops talking. */
+export function setQuiet(on) {
+  quiet = Boolean(on);
+  if (!quiet) return;
+  clearTimeout(fadeTimer);
+  clearTimeout(goneTimer);
+  $("mascot-say").classList.add("is-faded", "is-gone");
 }
 
 /** Show an expression for `ms`, optionally with a line of the given kind. */
@@ -186,14 +204,13 @@ function evaluate() {
   $("mascot-bar").dataset.mood = mood;
   if (mood === "error") { react("error"); return; } // grumpy first, then the sad mood face
   render();
-  say(mood);
+  if (SPEAKS.has(mood)) say(mood);
 }
 
 /** Report something the mascot should react to: no_key, offline, error, empty, pomo, session, ai, streak. */
 export function signal(key, value) {
   const prev = signals[key];
   signals[key] = value;
-  if (key === "error" || key === "ai" || key === "offline" || key === "no_key") everLoaded = true;
   evaluate();
   const now = Date.now();
   if (key === "session" && Boolean(value) !== Boolean(prev)) {
@@ -218,20 +235,10 @@ export function focusEnd(percent) {
   react(percent >= 80 ? "focusHigh" : percent >= 40 ? "focusMid" : "focusLow");
 }
 
-function greetingKind(hour = new Date().getHours()) {
-  if (hour >= 5 && hour < 12) return "morning";
-  if (hour >= 12 && hour < 18) return "afternoon";
-  if (hour >= 18 && hour < 23) return "evening";
-  return "night";
-}
-
 export function setTheme(t) {
   theme = t;
   $("mascot-bar").dataset.hasSprite = String(Boolean(t.sprite));
   render();
-  if (!t.sprite) return;
-  if (mood === "idle") react(greetingKind()); // switching theme = meeting a new character
-  else say(mood);
 }
 
 export function currentMood() {
@@ -261,9 +268,7 @@ function fidget(now) {
   nextFidget = now + 25000 + Math.random() * 35000;
   if (override || drowsy || loading || !CALM.has(mood)) return;
   const r = Math.random();
-  const quiet = now - lastSaid > 90000 && $("mascot-say").classList.contains("is-faded");
-  if (quiet && r < 0.3) react("chatter");
-  else if (r < 0.55) hold("wink", null, 450);
+  if (r < 0.55) hold("wink", null, 450);
   else if (r < 0.8) hold("thinking", null, 1400);
   else hold("happy", null, 900);
 }
@@ -273,11 +278,10 @@ function tick() {
   if (!drowsy && !override && CALM.has(mood) && now - lastActive > DROWSY_AFTER) {
     drowsy = true;
     render();
-    say("drowsy");
   }
   if (sessionSince && !longSessionSaid && now - sessionSince > LONG_SESSION && !override) {
     longSessionSaid = true;
-    react("longSession");
+    hold("proud", null, 3200);
   }
   if (now >= nextFidget) fidget(now);
 }
@@ -297,7 +301,7 @@ export function init() {
   // Any input counts as activity and wakes a dozing mascot.
   const active = () => {
     lastActive = Date.now();
-    if (drowsy) { drowsy = false; react("wake"); }
+    if (drowsy) { drowsy = false; hold("surprised", null, 1500); }
   };
   for (const ev of ["pointerdown", "keydown", "wheel"]) document.addEventListener(ev, active, { passive: true });
   let lastMove = 0;
@@ -313,7 +317,6 @@ export function init() {
       if (busy) {
         busyTimer = setTimeout(() => {
           loading = true;
-          if (!everLoaded && !override) say("loading");
           render();
         }, 400);
       } else if (loading) {

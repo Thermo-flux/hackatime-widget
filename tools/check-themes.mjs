@@ -6,7 +6,7 @@ import { EXPRESSIONS, LINE_KINDS, DEFAULT_LINES } from "../ui/js/mascot.js";
 const REQUIRED = ["--bg", "--surface-2", "--fg", "--muted", "--border", "--accent", "--on-accent", "--human", "--ai", "--success", "--violet", "--warn", "--warn-bg", "--danger", "--focus", "--radius-sm", "--radius-md", "--radius-lg", "--shadow", "--font"];
 const MOODS = LINE_KINDS; // every speech-line kind the engine uses
 const PATCHES = ["blink", ...EXPRESSIONS.filter((e) => e !== "neutral")]; // every expression the engine can show
-const MAX_LINE = 30; // the speech bubble is ~130px wide and should stay within two lines
+const MAX_LINE = 28; // the speech bubble is ~130px wide and every line must fit on one line
 const errors = [], warnings = [];
 const err = (t, m) => errors.push(`${t}: ${m}`);
 const warn = (t, m) => warnings.push(`${t}: ${m}`);
