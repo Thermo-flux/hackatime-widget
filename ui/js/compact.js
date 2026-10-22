@@ -44,6 +44,7 @@ export function describe(stats, c) {
 }
 
 export function render() {
+  paintMascot(); // cheap (16x16), and follows a theme or mood change while the pill is up
   const c = content(day, pomodoro.snapshot(), sessions.liveElapsed());
   $("pill-time").textContent = c.text;
   const dot = $("pill-dot");
