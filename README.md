@@ -20,7 +20,7 @@ the widget only reads them back.
      `~/.wakatime.cfg` (`%USERPROFILE%\.wakatime.cfg` on Windows). Nothing to do.
    - **Manual**: paste your API key. It is on the Hackatime setup page,
      <https://hackatime.hackclub.com/my/wakatime_setup>.
-3. Use the tabs: **Stats**, **Sessions**, **Pomodoro**. The `×` hides the widget (it has no taskbar entry). Use the **tray icon** to bring it back: left-click toggles show/hide, right-click has *Theme*, *Launch at login* and *Quit*. The widget remembers where you left it, and a finished Pomodoro phase raises a native notification.
+3. Use the tabs: **Stats**, **Sessions**, **Pomodoro**. The `–` hides the widget to the background and `×` quits (it has no taskbar entry). Use the **tray icon** to bring it back: left-click toggles show/hide, right-click has *Theme*, *Launch at login* and *Quit*. The widget remembers where you left it, and a finished Pomodoro phase raises a native notification.
 
 ### Platform notes
 | OS | Notes |

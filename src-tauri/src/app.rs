@@ -295,7 +295,7 @@ fn quit_app(app: &AppHandle) {
     app.exit(0);
 }
 
-/// The `x` button. Hides the widget; if there is no tray icon to restore it from, quits instead.
+/// The `–` button. Hides the widget; if there is no tray icon to restore it from, quits instead.
 #[tauri::command]
 fn hide_window(app: AppHandle, tray: State<HasTray>) {
     if !tray.0 {
@@ -305,6 +305,12 @@ fn hide_window(app: AppHandle, tray: State<HasTray>) {
         app.state::<WindowPlace>().flush();
         let _ = w.hide();
     }
+}
+
+/// The `×` button: really quits (the tray menu and `–` are the ways to keep it running in the background).
+#[tauri::command]
+fn quit(app: AppHandle) {
+    quit_app(&app);
 }
 
 fn toggle_window(app: &AppHandle) {
@@ -613,7 +619,7 @@ pub fn run() {
             let has_tray = match build_tray(app, &cfg.compact_hotkey) {
                 Ok(()) => true,
                 Err(e) => {
-                    eprintln!("tray icon unavailable, the x button will quit: {e}");
+                    eprintln!("tray icon unavailable, the minimise button will quit: {e}");
                     false
                 }
             };
@@ -629,6 +635,7 @@ pub fn run() {
             set_pomodoro,
             set_quiet_mascot,
             hide_window,
+            quit,
             set_mode,
             #[cfg(debug_assertions)]
             test_move_window,

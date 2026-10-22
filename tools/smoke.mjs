@@ -140,6 +140,6 @@ log("== setup/error forms reachable");
 await click("#tab-stats");
 log("close button present:", await ev("!!document.getElementById('close')"));
 await shot("4-final");
-log("hide:", await click("#close"));
+log("hide:", await click("#minimise"));
 await sleep(800);
 ws.close();

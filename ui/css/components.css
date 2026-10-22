@@ -95,6 +95,7 @@
   cursor: pointer;
 }
 .icon-btn:hover { background: var(--surface-2); color: var(--danger); }
+.icon-btn--soft:hover { color: var(--fg); }
 
 /* ---- Badge ---- */
 /* Out of the header's flow so the tab bar is the same width on every tab, with or without sample data. */

@@ -3,6 +3,7 @@
 .header__top { display: flex; align-items: center; gap: var(--space-2); }
 .header__top .seg { flex: 1 1 0; min-width: 0; }
 .header__top .icon-btn { margin-left: auto; }
+.header__top .icon-btn + .icon-btn { margin-left: 0; }
 
 .view { display: flex; flex-direction: column; gap: var(--space-3); flex: 1; min-height: 0; }
 
