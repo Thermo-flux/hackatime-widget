@@ -54,7 +54,10 @@
 .pill__main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
 .pill__time { font-size: var(--fs-sm); font-weight: var(--fw-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pill__dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+/* A live session is red ("recording")... except where the theme's accent (the focus dot) is red, pink or rust too;
+   there it is violet, which is far from the accent in those themes, so the two dots never look alike. */
 .pill__dot[data-kind="session"] { background: var(--danger); }
+:root:is([data-skin="tomato"], [data-skin="cat"], [data-skin="dog"], [data-skin="mushroom"], [data-skin="boba"], [data-skin="jelly"]) .pill__dot[data-kind="session"] { background: var(--violet); }
 .pill__dot[data-kind="break"] { background: var(--success); }
 
 .pill__bar { flex: none; display: flex; width: 48px; height: 4px; border-radius: 2px; overflow: hidden; background: var(--surface-2); }
