@@ -694,7 +694,7 @@ const RAW = [
     name: "Green Screen Gary",
     mode: "dark",
     tokens: {
-      "--bg": "#050d07", "--surface-2": "#0d1f12", "--fg": "#7dffa6", "--muted": "#4fbf72", "--border": "#1d4a2a",
+      "--bg": "#050d07", "--surface-2": "#0d1f12", "--fg": "#7dffa6", "--muted": "#3aa35c", "--border": "#1d4a2a",
       "--accent": "#39ff7a", "--on-accent": "#031006", "--human": "#39ff7a", "--ai": "#ff6a3d", "--success": "#5fe8ff",
       "--violet": "#c8a2ff", "--warn": "#ffb000", "--warn-bg": "#2a1f05", "--danger": "#ff5f4f", "--focus": "#9dffbf",
       "--radius-sm": "0px", "--radius-md": "0px", "--radius-lg": "4px", "--shadow": "0 0 0 2px #1d4a2a, 0 0 22px rgba(57,255,122,0.18)",

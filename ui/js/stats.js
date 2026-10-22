@@ -131,7 +131,10 @@ function setStale(on, banner = on) {
 let offlineKind = "Offline";
 
 function updateAgo() {
-  $("updated").textContent = shown ? `Updated ${ago(nowSecs() - shown.fetchedAt)}` : "";
+  // Just the age ("2m ago"): the full "Updated ..." sentence is the tooltip and the screen-reader label.
+  const age = shown ? ago(nowSecs() - shown.fetchedAt) : "";
+  $("updated").textContent = age;
+  $("updated").title = shown ? `Updated ${age}` : "";
 }
 
 function showData(stats, fetchedAt, forRange) {

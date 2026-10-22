@@ -53,7 +53,7 @@ for (const t of THEMES) {
     if (T["--fg"] && T["--surface-2"] && contrast(T["--fg"], T["--surface-2"]) < 4.5) err(id, `fg on surface-2 ${contrast(T["--fg"], T["--surface-2"]).toFixed(2)} < 4.5`);
     if (T["--on-accent"] && T["--accent"] && contrast(T["--on-accent"], T["--accent"]) < 4.5) err(id, `on-accent on accent ${contrast(T["--on-accent"], T["--accent"]).toFixed(2)} < 4.5`);
     if (T["--muted"] && T["--bg"] && contrast(T["--muted"], T["--bg"]) < 4.5) err(id, `muted on bg ${contrast(T["--muted"], T["--bg"]).toFixed(2)} < 4.5`);
-    if (T["--muted"] && T["--surface-2"] && contrast(T["--muted"], T["--surface-2"]) < 4.5) warn(id, `muted on surface-2 ${contrast(T["--muted"], T["--surface-2"]).toFixed(2)} < 4.5`);
+    if (T["--muted"] && T["--surface-2"] && contrast(T["--muted"], T["--surface-2"]) < 4.5) err(id, `muted on surface-2 ${contrast(T["--muted"], T["--surface-2"]).toFixed(2)} < 4.5`);
     if (T["--human"] && T["--ai"]) {
       const normal = contrast(T["--human"], T["--ai"]), cb = contrast(deut(T["--human"]), deut(T["--ai"]));
       if (normal < 1.4) err(id, `human vs ai too similar (${normal.toFixed(2)})`);

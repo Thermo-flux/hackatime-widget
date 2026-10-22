@@ -46,7 +46,7 @@
 }
 
 /* The range picker is a second level under the tab bar: no track, smaller text, selected = colour + 2px underline. */
-#ranges.seg { gap: 0; padding: 0; background: none; border: 0; border-radius: 0; }
+#ranges.seg { position: relative; z-index: 1; /* above the tall line box of a display font in the total below */ gap: 0; padding: 0; background: none; border: 0; border-radius: 0; }
 #ranges .seg__btn {
   min-height: 24px; border-radius: 0; border-bottom: 2px solid transparent;
   font-size: var(--fs-xs); background: none; box-shadow: none;
@@ -272,7 +272,8 @@
 .list-toggle__btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .lang--none { color: var(--muted); }
 .langs__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
-.updated { color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
+.updated { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
+.list-toggle { flex: none; }
 .updated:empty { display: none; }
 #stats-ok.is-stale .total,
 #stats-ok.is-stale .stat-bar,

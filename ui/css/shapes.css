@@ -150,6 +150,9 @@
 :root[data-skin="ghost"] .header__top .seg__btn { font-size: 12px; }
 
 /* ---------- Shroomie (mushroom): spotted cap over a narrower stem ---------- */
+:root[data-skin="mushroom"] .tile__label, :root[data-skin="mushroom"] .hint, :root[data-skin="mushroom"] .chart-days,
+:root[data-skin="mushroom"] .picker__item, :root[data-skin="mushroom"] .mascot-say { font-size: 12px; } /* serif small text needs 12px */
+:root[data-skin="mushroom"] .live-head { padding-top: 8px; } /* clear of the cap's frill */
 :root[data-skin="mushroom"] { --pad-t: 8px; }
 :root[data-skin="mushroom"] .shell {
   filter: drop-shadow(1.5px 0 0 #6b4a3a) drop-shadow(-1.5px 0 0 #6b4a3a) drop-shadow(0 1.5px 0 #6b4a3a) drop-shadow(0 -1.5px 0 #6b4a3a)
