@@ -45,6 +45,16 @@
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.15);
 }
 
+/* The range picker is a second level under the tab bar: no track, smaller text, selected = colour + 2px underline. */
+#ranges.seg { gap: 0; padding: 0; background: none; border: 0; border-radius: 0; }
+#ranges .seg__btn {
+  min-height: 24px; border-radius: 0; border-bottom: 2px solid transparent;
+  font-size: var(--fs-xs); background: none; box-shadow: none;
+}
+#ranges .seg__btn[aria-pressed="true"] {
+  background: none; box-shadow: none; color: var(--fg); border-bottom-color: var(--accent);
+}
+
 /* ---- Buttons ---- */
 .btn {
   min-height: 32px;
