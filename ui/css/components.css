@@ -96,15 +96,17 @@
 .icon-btn:hover { background: var(--surface-2); color: var(--danger); }
 
 /* ---- Badge ---- */
+/* Out of the header's flow so the tab bar is the same width on every tab, with or without sample data. */
 .badge {
-  align-self: flex-start;
-  padding: 2px var(--space-2);
+  position: absolute; top: 3px; left: 50%; transform: translateX(-50%); z-index: 2;
+  padding: 0 6px;
   border-radius: var(--radius-pill);
-  font-size: var(--fs-xs);
+  font-size: 10px; line-height: 14px;
   font-weight: var(--fw-semibold);
+  pointer-events: none;
 }
 .badge--warn { background: var(--warn-bg); color: var(--warn); }
-.badge.is-off { visibility: hidden; } /* keep its space so the tabs don't jump on the Pomodoro tab */
+.badge.is-off { visibility: hidden; } /* sample data only affects Stats and Sessions */
 
 /* ---- Stat bar: human | ai ---- */
 .stat-bar {

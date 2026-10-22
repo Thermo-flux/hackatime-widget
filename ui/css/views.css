@@ -1,7 +1,7 @@
 /* Layout only; component looks live in components.css. */
 .header { display: grid; gap: var(--space-2); }
 .header__top { display: flex; align-items: center; gap: var(--space-2); }
-.header__top .seg { flex: 1 1 0; min-width: 0; } /* fixed width so tabs don't jump when the badge hides */
+.header__top .seg { flex: 1 1 0; min-width: 0; }
 .header__top .icon-btn { margin-left: auto; }
 
 .view { display: flex; flex-direction: column; gap: var(--space-3); flex: 1; min-height: 0; }
