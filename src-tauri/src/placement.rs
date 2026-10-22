@@ -24,6 +24,11 @@ impl Rect {
     }
 }
 
+/// The area two rects share, in square pixels.
+pub fn overlap(a: &Rect, b: &Rect) -> i64 {
+    a.overlap(b)
+}
+
 /// Index of the area `window` overlaps most; if it overlaps none, the first (the primary monitor).
 pub fn area_for(window: &Rect, areas: &[Rect]) -> Option<usize> {
     let best = areas.iter().enumerate().filter(|(_, a)| window.overlap(a) > 0).max_by_key(|(_, a)| window.overlap(a));

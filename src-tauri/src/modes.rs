@@ -78,7 +78,7 @@ pub struct Placement {
     /// Scale factor of the monitor the window is on.
     pub scale: f64,
     /// How far clamping moved the window from the pure top-right anchor (physical px). The UI uses it to
-    /// start the expand animation where the pill really was.
+    /// start the expand animation where the pill really was, and to aim a clamped collapse.
     pub shift: (i32, i32),
 }
 
@@ -89,15 +89,28 @@ fn monitor_for(window: &Rect, monitors: &[Monitor]) -> Option<Monitor> {
 }
 
 /// Switching to `to` from a window currently at `current` (physical outer rect): the new size uses the
-/// current monitor's scale factor, the top-right corner stays put, and the result is clamped into that
-/// monitor's work area (so expanding near a screen edge never pushes the widget off-screen, and never
-/// onto a neighbouring monitor either).
+/// current monitor's scale factor and the top-right corner stays put.
+/// - Expanding then clamps into that monitor's work area (so expanding near a screen edge never pushes the
+///   widget off-screen, and never onto a neighbouring monitor either).
+/// - Collapsing keeps the exact anchor, so the pill lands where the morph drew it: the pill lies inside the
+///   full window, so it is as visible as the widget was. Only a pill that would be mostly off every screen
+///   (the full window was dragged far off) is clamped back; the UI previews that shift and morphs towards it.
 pub fn switch(to: Mode, current: Rect, monitors: &[Monitor]) -> Placement {
     let monitor = monitor_for(&current, monitors);
     let scale = monitor.map_or(1.0, |m| sane(m.scale));
     let size = physical_size(to.logical_size(), scale);
     let anchored = anchor_top_right((current.x, current.y), (current.w, current.h), size);
-    let pos = monitor.map_or(anchored, |m| placement::fit_into(anchored, size, &m.work_area));
+    let rect = Rect { x: anchored.0, y: anchored.1, w: size.0, h: size.1 };
+    // Work areas don't overlap, so the sum is how much of the pill is on some screen.
+    let visible: i64 = monitors.iter().map(|m| placement::overlap(&rect, &m.work_area)).sum();
+    let mostly_visible = 2 * visible >= rect.w as i64 * rect.h as i64;
+    let pos = match monitor {
+        Some(_) if to == Mode::Compact && mostly_visible => anchored,
+        // A pill that must be clamped goes onto the monitor it mostly is on (else the window's).
+        Some(m) if to == Mode::Compact => placement::fit_into(anchored, size, &monitor_for(&rect, monitors).unwrap_or(m).work_area),
+        Some(m) => placement::fit_into(anchored, size, &m.work_area),
+        None => anchored,
+    };
     Placement { pos, size, scale, shift: (pos.0 - anchored.0, pos.1 - anchored.1) }
 }
 
@@ -113,6 +126,52 @@ pub fn at_launch(mode: Mode, saved: Option<(i32, i32)>, monitors: &[Monitor]) ->
     let size = physical_size(mode.logical_size(), scale);
     let fitted = monitor.map_or(pos, |m| placement::fit_into(pos, size, &m.work_area));
     Some(Placement { pos: fitted, size, scale, shift: (fitted.0 - pos.0, fitted.1 - pos.1) })
+}
+
+/// Whether a reported window position is a real place. Windows parks a minimised window at -32000.
+pub fn is_real_position(pos: (i32, i32)) -> bool {
+    pos.0 > -32000 && pos.1 > -32000
+}
+
+/// Window state waiting to be written to the config. Drags (many `Moved` events) and mode switches only
+/// update this; a background tick writes it, so no file write ever blocks the UI thread mid-switch.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct Pending {
+    mode: Option<Mode>,
+    full: Option<(i32, i32)>,
+    compact: Option<(i32, i32)>,
+}
+
+impl Pending {
+    fn slot(&mut self, mode: Mode) -> &mut Option<(i32, i32)> {
+        match mode {
+            Mode::Full => &mut self.full,
+            Mode::Compact => &mut self.compact,
+        }
+    }
+
+    /// The window of mode `mode` is now at `pos` (a drag, or the end of a switch).
+    pub fn moved(&mut self, mode: Mode, pos: (i32, i32)) {
+        if is_real_position(pos) {
+            *self.slot(mode) = Some(pos);
+        }
+    }
+
+    /// A switch from `from` (the window was at `from_pos`) to `to` (now at `to_pos`).
+    pub fn switched(&mut self, from: Mode, from_pos: (i32, i32), to: Mode, to_pos: (i32, i32)) {
+        self.mode = Some(to);
+        if from != to {
+            self.moved(from, from_pos);
+        }
+        self.moved(to, to_pos);
+    }
+
+    /// What to write, as `config::save_window` takes it, leaving nothing pending; `None` when there's nothing.
+    pub fn take(&mut self) -> Option<(Option<Mode>, Vec<(Mode, (i32, i32))>)> {
+        let p = std::mem::take(self);
+        let positions: Vec<_> = [(Mode::Full, p.full), (Mode::Compact, p.compact)].into_iter().filter_map(|(m, pos)| pos.map(|pos| (m, pos))).collect();
+        (p.mode.is_some() || !positions.is_empty()).then_some((p.mode, positions))
+    }
 }
 
 /// Script run before the page on window creation when the app starts compact, so the very first paint is
@@ -227,11 +286,40 @@ mod tests {
     }
 
     #[test]
-    fn collapsing_a_window_partly_off_screen_brings_the_pill_back() {
+    fn collapsing_keeps_the_exact_anchor_while_the_pill_is_mostly_visible() {
         let monitors = [mon(PRIMARY, 1.0)];
-        // Full window dragged so its right part is past the right edge: the pill (its top-right) is pulled in.
+        // The full window hangs 100px past the right edge: the pill is 140 of 240px on screen. No jump.
+        let c = switch(Mode::Compact, rect(1700, 100, (320, 436)), &monitors);
+        assert_eq!((c.pos, c.shift), ((1780, 100), (0, 0)));
+        // Exactly half visible still counts.
+        let c = switch(Mode::Compact, rect(1720, 100, (320, 436)), &monitors);
+        assert_eq!((c.pos, c.shift), ((1800, 100), (0, 0)));
+        // Partly above the top edge but mostly on screen.
+        let c = switch(Mode::Compact, rect(500, -25, (320, 436)), &monitors);
+        assert_eq!((c.pos, c.shift), ((580, -25), (0, 0)));
+    }
+
+    #[test]
+    fn collapsing_a_window_far_off_screen_brings_the_pill_back() {
+        let monitors = [mon(PRIMARY, 1.0)];
+        // Only 40px of the pill would be on screen: it is pulled in, and the UI aims the morph with the shift.
         let c = switch(Mode::Compact, rect(1800, 100, (320, 436)), &monitors);
         assert_eq!((c.pos, c.shift), ((1680, 100), (-200, 0)));
+        // The full window's top part is above the screen: the pill comes down.
+        let c = switch(Mode::Compact, rect(500, -400, (320, 436)), &monitors);
+        assert_eq!((c.pos, c.shift), ((580, 0), (0, 400)));
+    }
+
+    #[test]
+    fn a_pill_split_across_two_monitors_counts_as_visible() {
+        let right = Rect { x: 1920, y: 0, w: 1920, h: 1040 };
+        let monitors = [mon(PRIMARY, 1.0), mon(right, 1.0)];
+        // 140px on the primary, 100px on the secondary: fully visible, so it stays exactly anchored.
+        let c = switch(Mode::Compact, rect(1700, 500, (320, 436)), &monitors);
+        assert_eq!((c.pos, c.shift), ((1780, 500), (0, 0)));
+        // The same pill mostly below both screens: clamped onto the monitor it covers most.
+        let c = switch(Mode::Compact, rect(1700, 1020, (320, 436)), &monitors);
+        assert_eq!((c.pos, c.shift), ((1680, 980), (-100, -40)));
     }
 
     #[test]
@@ -294,6 +382,24 @@ mod tests {
         // The saved monitor is gone: back onto the primary.
         let p = at_launch(Mode::Compact, Some((5000, 300)), &[mon(PRIMARY, 1.0)]).unwrap();
         assert_eq!((p.pos, p.size), ((1680, 300), (240, 60)));
+    }
+
+    #[test]
+    fn pending_state_keeps_the_newest_of_each_and_ignores_minimised_positions() {
+        let mut p = Pending::default();
+        assert_eq!(p.take(), None);
+        p.moved(Mode::Compact, (1, 2));
+        p.moved(Mode::Compact, (3, 4));
+        p.moved(Mode::Compact, (-32000, -32000));
+        assert_eq!(p.take(), Some((None, vec![(Mode::Compact, (3, 4))])));
+        assert_eq!(p.take(), None);
+        // A switch away from a minimised window keeps the old full position out of the config.
+        p.switched(Mode::Full, (-32000, -32000), Mode::Compact, (80, 0));
+        assert_eq!(p.take(), Some((Some(Mode::Compact), vec![(Mode::Compact, (80, 0))])));
+        p.switched(Mode::Compact, (80, 0), Mode::Full, (0, 0));
+        p.moved(Mode::Full, (5, 5));
+        assert_eq!(p.take(), Some((Some(Mode::Full), vec![(Mode::Full, (5, 5)), (Mode::Compact, (80, 0))])));
+        assert!(is_real_position((-31999, 0)) && !is_real_position((0, -32000)));
     }
 
     #[test]

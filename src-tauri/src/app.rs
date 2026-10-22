@@ -216,10 +216,13 @@ fn get_cached_stats(range: String) -> Option<CachedStats> {
     Some(CachedStats { fetched_at: entry.fetched_at, stale: cache::is_stale(&entry, now), stats: entry.stats })
 }
 
-/// What the UI may see of the config. The key and server URL never leave Rust.
+/// What the UI may see of the config. The key and server URL never leave Rust. `ui_mode` is the window's
+/// actual mode (not only the file's), so a page that loads or reloads always starts in step with the window.
 #[tauri::command]
-fn get_config() -> ConfigView {
-    (&config::load()).into()
+fn get_config(place: State<WindowPlace>) -> ConfigView {
+    let mut view: ConfigView = (&config::load()).into();
+    view.ui_mode = place.mode();
+    view
 }
 
 /// Checks the key's shape before saving it, so a typo never costs a network call.
@@ -258,29 +261,30 @@ fn uses_window_state_plugin() -> bool {
     std::env::var("HACKATIME_WIDGET_NO_WINDOW_STATE").map_or(true, |v| v != "1")
 }
 
-/// The current mode and a window position not yet written to the config. Dragging fires many `Moved`
-/// events; the newest one waits here and the 1 s background tick writes it (a throttled save).
+/// The window's actual mode, and window state not yet written to the config. Dragging fires many `Moved`
+/// events and a switch changes the mode; both only update `pending`, which the 1 s background tick writes
+/// (a throttled save that never blocks the main thread while the page is hidden mid-switch).
 struct WindowPlace {
     mode: Mutex<Mode>,
-    unsaved: Mutex<Option<(Mode, (i32, i32))>>,
+    pending: Mutex<modes::Pending>,
 }
 
 impl WindowPlace {
-    fn moved(&self, pos: (i32, i32)) {
-        // Windows reports a minimised window at -32000; that is not a place to remember.
-        if pos.0 <= -32000 || pos.1 <= -32000 {
-            return;
-        }
-        let mode = *self.mode.lock().unwrap();
-        *self.unsaved.lock().unwrap() = Some((mode, pos));
+    fn mode(&self) -> Mode {
+        *self.mode.lock().unwrap()
     }
 
-    /// Writes the pending position, if any. A failed write is only logged: positions are a convenience.
+    fn moved(&self, pos: (i32, i32)) {
+        let mode = self.mode();
+        self.pending.lock().unwrap().moved(mode, pos);
+    }
+
+    /// Writes the pending state, if any. A failed write is only logged: window state is a convenience, and
+    /// a config that can't be read is left alone (see `config::update`).
     fn flush(&self) {
-        if let Some((mode, pos)) = self.unsaved.lock().unwrap().take() {
-            if let Err(e) = config::save_window(None, &[(mode, pos)]) {
-                eprintln!("window position not saved: {e}");
-            }
+        let Some((mode, positions)) = self.pending.lock().unwrap().take() else { return };
+        if let Err(e) = config::save_window(mode, &positions) {
+            eprintln!("window state not saved: {e}");
         }
     }
 }
@@ -364,10 +368,12 @@ struct ModeRect {
 }
 
 /// Switches the window between the full widget and the compact pill: size, position (top-right anchor,
-/// clamped into the monitor's work area) and persistence. All window work happens here, so the page needs
-/// no window size or position permissions. Animations are the page's business (`mode.js`).
+/// clamped as `modes::switch` says) and persistence (queued for the background tick). All window work
+/// happens here, so the page needs no window size or position permissions. Animations are the page's
+/// business (`mode.js`). With `preview: true` nothing changes: it returns where the switch would put the
+/// window, so a collapse can aim its animation at a clamped pill.
 #[tauri::command]
-fn set_mode(app: AppHandle, place: State<WindowPlace>, mode: String) -> Result<ModeRect> {
+fn set_mode(app: AppHandle, place: State<WindowPlace>, mode: String, preview: Option<bool>) -> Result<ModeRect> {
     let to = Mode::parse(&mode).ok_or_else(|| Error::Window(format!("unknown mode {mode:?}")))?;
     let w = app.get_webview_window("main").ok_or_else(|| Error::Window("no main window".into()))?;
     let fail = |e: tauri::Error| Error::Window(e.to_string());
@@ -375,19 +381,13 @@ fn set_mode(app: AppHandle, place: State<WindowPlace>, mode: String) -> Result<M
     let current = placement::Rect { x: pos.x, y: pos.y, w: size.width, h: size.height };
     let p = modes::switch(to, current, &monitors(&w));
 
-    let from = std::mem::replace(&mut *place.mode.lock().unwrap(), to);
-    // Position first, then size: the page hides itself for this moment (see mode.js), so the in-between
-    // state is never seen whichever order the OS paints.
-    w.set_position(tauri::PhysicalPosition::new(p.pos.0, p.pos.1)).map_err(fail)?;
-    w.set_size(tauri::PhysicalSize::new(p.size.0, p.size.1)).map_err(fail)?;
-
-    let mut positions = vec![(to, p.pos)];
-    if from != to {
-        positions.push((from, (pos.x, pos.y)));
-    }
-    *place.unsaved.lock().unwrap() = None;
-    if let Err(e) = config::save_window(Some(to), &positions) {
-        eprintln!("window mode not saved: {e}");
+    if !preview.unwrap_or(false) {
+        let from = std::mem::replace(&mut *place.mode.lock().unwrap(), to);
+        // Position first, then size: the page hides itself for this moment (see mode.js), so the in-between
+        // state is never seen whichever order the OS paints.
+        w.set_position(tauri::PhysicalPosition::new(p.pos.0, p.pos.1)).map_err(fail)?;
+        w.set_size(tauri::PhysicalSize::new(p.size.0, p.size.1)).map_err(fail)?;
+        place.pending.lock().unwrap().switched(from, (pos.x, pos.y), to, p.pos);
     }
     let l = |v: i32| modes::to_logical(v as i64, p.scale);
     Ok(ModeRect {
@@ -402,8 +402,10 @@ fn set_mode(app: AppHandle, place: State<WindowPlace>, mode: String) -> Result<M
     })
 }
 
-/// Automated tests only (`HACKATIME_WIDGET_TEST_HOOKS=1`, refused otherwise): moves the window like a drag
-/// would (physical pixels), so the `Moved` -> config path can be checked without a real pointer.
+/// Automated tests only: moves the window like a drag would (physical pixels), so the `Moved` -> config path
+/// can be checked without a real pointer. Compiled into debug builds only, and refused there too unless
+/// `HACKATIME_WIDGET_TEST_HOOKS=1`.
+#[cfg(debug_assertions)]
 #[tauri::command]
 fn test_move_window(app: AppHandle, x: i32, y: i32) -> Result<()> {
     if !std::env::var("HACKATIME_WIDGET_TEST_HOOKS").is_ok_and(|v| v == "1") {
@@ -559,7 +561,7 @@ pub fn run() {
         .manage(Sessions(Mutex::new(store)))
         .manage(Heartbeats(Mutex::new(activity::HeartbeatCache::default())))
         .manage(FocusBeats(Mutex::new(activity::HeartbeatCache::default())))
-        .manage(WindowPlace { mode: Mutex::new(cfg.ui_mode), unsaved: Mutex::new(None) })
+        .manage(WindowPlace { mode: Mutex::new(cfg.ui_mode), pending: Mutex::new(modes::Pending::default()) })
         .setup(move |app| {
             let _ = app.state::<Timer>().app.set(app.handle().clone());
             let handle = app.handle().clone();
@@ -628,6 +630,7 @@ pub fn run() {
             set_quiet_mascot,
             hide_window,
             set_mode,
+            #[cfg(debug_assertions)]
             test_move_window,
             session_state,
             recently_active,
