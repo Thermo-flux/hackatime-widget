@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 pub const DEFAULT_BASE_URL: &str = "https://hackatime.hackclub.com/api/hackatime/v1";
+pub const DEFAULT_HOTKEY: &str = "CommandOrControl+Alt+Shift+H";
 
 /// Every field is optional so a hand-written `{"api_key": "..."}` is enough.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -17,6 +18,8 @@ pub struct Config {
     pub mock: bool,
     /// The mascot keeps its faces but only speaks when petted.
     pub quiet_mascot: bool,
+    /// Global shortcut that toggles compact mode.
+    pub compact_hotkey: String,
     pub pomodoro: PomodoroConfig,
 }
 
@@ -28,6 +31,7 @@ impl Default for Config {
             refresh_secs: 300,
             mock: false,
             quiet_mascot: false,
+            compact_hotkey: DEFAULT_HOTKEY.into(),
             pomodoro: PomodoroConfig::default(),
         }
     }
@@ -271,6 +275,12 @@ mod tests {
     fn out_of_range_pomodoro_lengths_are_clamped_on_load() {
         let cfg = parse(r#"{"pomodoro":{"focus_min":0,"short_break_min":500,"long_break_min":91}}"#).unwrap();
         assert_eq!((cfg.pomodoro.focus_min, cfg.pomodoro.short_break_min, cfg.pomodoro.long_break_min), (1, 60, 90));
+    }
+
+    #[test]
+    fn the_compact_hotkey_has_a_default_and_can_be_changed() {
+        assert_eq!(parse("{}").unwrap().compact_hotkey, DEFAULT_HOTKEY);
+        assert_eq!(parse(r#"{"compact_hotkey":"Ctrl+Alt+J"}"#).unwrap().compact_hotkey, "Ctrl+Alt+J");
     }
 
     #[test]

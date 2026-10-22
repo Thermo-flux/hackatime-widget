@@ -10,9 +10,12 @@ mod config;
 mod error;
 mod focus_day;
 mod fsutil;
+mod notice;
+mod placement;
 mod pomodoro;
 mod sessions;
 mod stats;
+mod themes;
 
 #[cfg(not(test))]
 pub use app::run;

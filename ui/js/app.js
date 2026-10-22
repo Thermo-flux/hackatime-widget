@@ -37,7 +37,11 @@ function initTabs() {
   });
 }
 
-$("close").addEventListener("click", () => invoke("quit"));
+// The x hides the widget; the tray icon brings it back and has Quit.
+$("close").addEventListener("click", () => invoke("hide_window"));
+// Events from the tray menu (and, with Phase 7, the global hotkey).
+const listen = window.__TAURI__?.event?.listen;
+listen?.("set-theme", (e) => themes.apply(e.payload));
 // No browser context menu (Reload / Inspect) on a desktop widget.
 document.addEventListener("contextmenu", (e) => e.preventDefault());
 
