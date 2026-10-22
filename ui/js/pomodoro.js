@@ -287,6 +287,8 @@ function initSettings() {
   $("pomo-save").addEventListener("click", save);
 }
 
+/** The last timer snapshot the UI rendered, or null before the first one (read by the compact pill). */
+export const snapshot = () => state;
 export const pause = () => { clearInterval(poll); clearInterval(codedPoll); poll = codedPoll = null; };
 export function resume() {
   call("pomodoro_state");

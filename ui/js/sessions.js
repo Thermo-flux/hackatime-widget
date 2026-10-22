@@ -94,6 +94,9 @@ function renderLive(a, summary) {
   $("live-note").textContent = [act.top_project, act.top_language].filter(Boolean).join(" · ");
 }
 
+/** Seconds on the running session's clock, or null when none is running (read by the compact pill). */
+export const liveElapsed = () => (live ? live.elapsed + (performance.now() - live.at) / 1000 : null);
+
 function paintClock() {
   if (!live) return;
   $("live-elapsed").textContent = hms(live.elapsed + (performance.now() - live.at) / 1000);

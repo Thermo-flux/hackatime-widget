@@ -202,6 +202,18 @@
       <button class="btn btn--block" id="picker-close" type="button">Done</button>
     </section>
   </main>
+  <!-- The compact pill: shown instead of .card when html[data-mode="compact"]. Click or Enter expands. -->
+  <button class="pill" id="pill" type="button" aria-label="Hackatime. Click to expand.">
+    <canvas class="pill__mascot" id="pill-mascot" width="16" height="16" aria-hidden="true"></canvas>
+    <span class="pill__main">
+      <i class="pill__dot" id="pill-dot" aria-hidden="true" hidden></i>
+      <span class="pill__time tabular" id="pill-time">0m</span>
+    </span>
+    <span class="pill__bar" id="pill-bar" aria-hidden="true">
+      <span class="pill__human" id="pill-human"></span>
+      <span class="pill__ai" id="pill-ai"></span>
+    </span>
+  </button>
   <i class="deco deco-a" aria-hidden="true"></i>
   <i class="deco deco-b" aria-hidden="true"></i>
   </div>

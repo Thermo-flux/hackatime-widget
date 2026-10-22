@@ -1,0 +1,46 @@
+/* ---- Compact mode: a 220x40 pill instead of the card (Phase 7) ----
+   html[data-mode="compact"] is set by mode.js. The window is 240x60, so the body padding is the 10px margin that
+   holds the pill's shadow. Every colour comes from the theme's tokens, so all 13 themes work. */
+.pill { display: none; }
+
+:root[data-mode="compact"] body { padding: 10px; }
+:root[data-mode="compact"] .shell { filter: none; clip-path: none; mask: none; }
+:root[data-mode="compact"] .shell::before, :root[data-mode="compact"] .shell::after { display: none; }
+:root[data-mode="compact"] .card, :root[data-mode="compact"] .deco { display: none; }
+
+:root[data-mode="compact"] .pill {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 220px;
+  height: 40px;
+  padding: 0 14px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 2px 8px rgb(0 0 0 / 0.22);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+}
+.pill:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.pill__mascot { flex: none; width: 20px; height: 20px; image-rendering: pixelated; }
+.pill__main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
+.pill__time { font-size: var(--fs-sm); font-weight: var(--fw-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill__dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.pill__dot[data-kind="session"] { background: var(--danger); }
+.pill__dot[data-kind="break"] { background: var(--success); }
+
+.pill__bar { flex: none; display: flex; width: 48px; height: 4px; border-radius: 2px; overflow: hidden; background: var(--surface-2); }
+.pill__human { background: var(--human); }
+.pill__ai { background: var(--ai); }
+.pill__bar[data-unknown] { background: var(--border); }
+.pill__bar[data-unknown] .pill__human, .pill__bar[data-unknown] .pill__ai { width: 0 !important; }
+
+/* Heartbeats arrived in the last ~2 minutes: the bar breathes. */
+.pill__bar.is-live { animation: pill-pulse 2s ease-in-out infinite; }
+@keyframes pill-pulse { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .pill__bar.is-live { animation: none; } }

@@ -8,7 +8,9 @@ import { startServer } from "./serve.mjs";
 export const SCENARIOS = [
   "normal", "no_key", "unauthorized", "offline", "offline_cached", "zero", "ai_unavailable", "huge", "session_live",
   "session_live_noactivity", "sessions_empty", "pomo_running", "pomo_paused", "pomo_break", "pomo_many", "pomo_nolong", "pomo_finishing", "pomo_finishing_low", "down", "mock",
+  "compact_normal", "compact_pomo_running", "compact_pomo_break", "compact_session_live", "compact_ai_unavailable", "compact_zero", "compact_huge", "compact_offline",
 ];
+const PILL = [240, 60]; // the compact window
 const TABS = ["stats", "sessions", "pomodoro"];
 
 const args = process.argv.slice(2);
@@ -32,12 +34,23 @@ for (const scenario of scenarios) {
   page.on("pageerror", (e) => console.error(`[${scenario}] page error:`, e.message));
   await page.goto(`${base}?scenario=${scenario}`);
   await page.waitForLoadState("networkidle");
+  const compact = scenario.startsWith("compact_");
+  if (compact) {
+    await page.setViewportSize({ width: PILL[0], height: PILL[1] });
+    await page.evaluate(async () => {
+      document.documentElement.dataset.mode = "compact";
+      await import("/js/compact.js").then((m) => m.start());
+    });
+    await sleep(300);
+  }
   const themes = flag("themes") ?? (await page.evaluate(() => import("/js/themes.js").then((m) => m.list().map((t) => t.id))));
   written[scenario] = [];
   for (const theme of themes) {
     await page.evaluate((id) => import("/js/themes.js").then((m) => m.apply(id, { remember: false })), theme);
-    for (const tab of tabs) {
-      await page.click(`#tab-${tab}`);
+    for (const tab of compact ? ["pill"] : tabs) {
+      if (compact) {
+        await page.evaluate(() => import("/js/compact.js").then((m) => m.render()));
+      } else await page.click(`#tab-${tab}`);
       if (tab === "stats" && scenario === "huge") await page.click('[data-range="all"]'); // widest strings: All-time
       if (tab === "stats" && list) await page.click(`[data-list="${list}"]`);
       await sleep(350);
@@ -52,11 +65,13 @@ for (const scenario of scenarios) {
 // One sheet per scenario: a row per theme, a column per tab.
 const sheetPage = await ctx.newPage();
 for (const [scenario, items] of Object.entries(written)) {
-  const cols = tabs.length;
+  const compact = scenario.startsWith("compact_");
+  const cols = compact ? 3 : tabs.length;
+  const [w, h] = compact ? PILL : [320, 436];
   const cells = items.map((i) => `<figure><img src="${i.file}"><figcaption>${i.theme} · ${i.tab}</figcaption></figure>`).join("");
   const html = `<style>body{margin:0;background:#777;font:11px sans-serif;color:#fff}
-    .g{display:grid;grid-template-columns:repeat(${cols},320px);gap:6px;padding:6px}
-    figure{margin:0}img{width:320px;height:436px;display:block}figcaption{padding:2px 0}</style><div class="g">${cells}</div>`;
+    .g{display:grid;grid-template-columns:repeat(${cols},${w}px);gap:6px;padding:6px}
+    figure{margin:0}img{width:${w}px;height:${h}px;display:block}figcaption{padding:2px 0}</style><div class="g">${cells}</div>`;
   const { pathToFileURL } = await import("node:url");
   const { resolve } = await import("node:path");
   const sheetFile = resolve(out, `sheet-${scenario}.html`);

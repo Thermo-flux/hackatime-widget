@@ -182,6 +182,23 @@ where
     Ok(measure(&c.hbs, start as f64, now as f64))
 }
 
+/// How far back "recently active" looks: the compact pill's bar pulses while a heartbeat is this fresh.
+pub const RECENT_SECS: i64 = 150;
+
+/// True when any heartbeat falls inside the last `RECENT_SECS` before `now`.
+pub fn is_recent(hbs: &[Heartbeat], now: i64) -> bool {
+    let from = (now - RECENT_SECS) as f64;
+    hbs.iter().any(|h| h.time >= from && h.time <= now as f64)
+}
+
+/// Whether the editor reported anything in the last couple of minutes. Mock mode always says yes.
+pub async fn recently_active(cfg: &Config, now: i64) -> Result<bool> {
+    if cfg.mock {
+        return Ok(true);
+    }
+    Ok(is_recent(&api::fetch_heartbeats(cfg, now - RECENT_SECS, now).await?, now))
+}
+
 pub async fn for_session(cfg: &Config, cache: &Mutex<HeartbeatCache>, start: i64, now: i64) -> Result<Live> {
     if cfg.mock {
         return Ok(measure(&mock_heartbeats(start as f64, now as f64), start as f64, now as f64));
@@ -195,6 +212,15 @@ mod tests {
 
     fn hb(t: f64, cat: &str) -> Heartbeat {
         Heartbeat { time: t, category: Some(cat.into()), project: Some("p".into()), language: Some("Rust".into()) }
+    }
+
+    #[test]
+    fn recent_means_a_heartbeat_inside_the_window() {
+        let now = 10_000;
+        assert!(!is_recent(&[], now));
+        assert!(is_recent(&[hb(now as f64 - 149.0, "Coding")], now));
+        assert!(!is_recent(&[hb(now as f64 - 151.0, "Coding")], now));
+        assert!(!is_recent(&[hb(now as f64 + 5.0, "Coding")], now));
     }
 
     #[test]

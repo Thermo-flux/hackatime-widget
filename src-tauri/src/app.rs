@@ -139,6 +139,12 @@ struct LiveSession {
     activity_error: Option<String>,
 }
 
+/// Whether a heartbeat arrived in the last ~2 minutes (drives the compact pill's pulse). Errors read as "no".
+#[tauri::command]
+async fn recently_active() -> bool {
+    activity::recently_active(&config::load(), Utc::now().timestamp()).await.unwrap_or(false)
+}
+
 #[derive(Serialize)]
 struct SessionView {
     active: Option<LiveSession>,
@@ -470,6 +476,7 @@ pub fn run() {
             set_quiet_mascot,
             hide_window,
             session_state,
+            recently_active,
             session_start,
             session_stop,
             pomodoro_state,

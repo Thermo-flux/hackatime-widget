@@ -1,7 +1,8 @@
 // Stands in for Tauri in a plain browser: window.__TAURI__.core.invoke returns canned data per command.
 // The scenario comes from ?scenario=<name>. Shapes mirror the Rust structs (stats.rs, app.rs, pomodoro.rs, config.rs).
 (() => {
-  const scenario = new URLSearchParams(location.search).get("scenario") || "normal";
+  // compact_<name> shows the pill with the data of scenario <name> (shots.mjs switches the mode).
+  const scenario = (new URLSearchParams(location.search).get("scenario") || "normal").replace(/^compact_/, "");
   const H = 3600;
   const reject = (code, message) => Promise.reject({ code, message });
   const slice = (name, seconds) => ({ name, seconds });
@@ -93,6 +94,7 @@
     "plugin:opener|open_url": () => null,
     set_pomodoro: (a) => { const p = { ...pomo(), ...a.lengths }; const idle = p.remaining_secs >= p.total_secs; const t = (p.phase === "focus" ? p.focus_min : p.phase === "short_break" ? p.short_break_min : p.long_break_min) * 60; return idle ? { ...p, total_secs: t, remaining_secs: t } : p; },
     quit: () => null,
+    recently_active: () => scenario !== "zero" && scenario !== "pomo_paused",
     get_stats: (a) => {
       if (scenario === "no_key") return reject("no_key", "no API key configured");
       if (scenario === "unauthorized") return reject("unauthorized", "server returned 401");
