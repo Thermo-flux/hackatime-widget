@@ -4,7 +4,7 @@
   "description": "Main widget window",
   "windows": ["main"],
   "permissions": [
-    "core:default",
+    "core:event:default",
     "core:window:allow-start-dragging",
     { "identifier": "opener:allow-open-url", "allow": [{ "url": "https://hackatime.hackclub.com/*" }] }
   ]

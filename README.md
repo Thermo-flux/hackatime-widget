@@ -20,7 +20,7 @@ the widget only reads them back.
      `~/.wakatime.cfg` (`%USERPROFILE%\.wakatime.cfg` on Windows). Nothing to do.
    - **Manual**: paste your API key. It is on the Hackatime setup page,
      <https://hackatime.hackclub.com/my/wakatime_setup>.
-3. Use the tabs: **Stats**, **Sessions**, **Pomodoro**. The `×` quits (the widget has no taskbar entry).
+3. Use the tabs: **Stats**, **Sessions**, **Pomodoro**. The `×` hides the widget (it has no taskbar entry). Use the **tray icon** to bring it back: left-click toggles show/hide, right-click has *Theme*, *Launch at login* and *Quit*. The widget remembers where you left it, and a finished Pomodoro phase raises a native notification.
 
 ### Platform notes
 | OS | Notes |
@@ -50,6 +50,8 @@ Every field is optional; `{"api_key": "..."}` is a valid file.
 | `base_url` | `https://hackatime.hackclub.com/api/hackatime/v1` | Same value as `api_url` in `.wakatime.cfg`; only the host part is used. Change for a self-hosted Hackatime. |
 | `refresh_secs` | `300` | Stats refresh interval (minimum 30). |
 | `mock` | `false` | Show built-in sample data instead of calling Hackatime. |
+| `quiet_mascot` | `false` | The mascot only speaks when petted (also a toggle in the theme picker). |
+| `compact_hotkey` | `CommandOrControl+Alt+Shift+H` | Global shortcut for compact mode. If it can't be registered (taken, or unsupported on Wayland) it is skipped and logged. |
 | `pomodoro` | 25 / 5 / 15 min, long break every 4, `auto_start: false` | `focus_min` (1–180), `short_break_min` (1–60), `long_break_min` (1–90), `long_break_every` (0 = never, max 12), `auto_start`. Out-of-range values are clamped. The first three are set from the Pomodoro tab. |
 
 Saving from the widget (a pasted key, timer lengths) rewrites `config.json` but keeps every other field.
@@ -145,7 +147,8 @@ tools/           dev helpers (below)
 
 ### Developer tools and flags
 - `HACKATIME_WIDGET_MOCK=1` sample data; `HACKATIME_WIDGET_HIDDEN=1` keep the window off-screen for automated runs;
-  `HACKATIME_WIDGET_NO_WAKATIME_CFG=1` don't read `.wakatime.cfg`.
+  `HACKATIME_WIDGET_NO_WAKATIME_CFG=1` don't read `.wakatime.cfg`; `HACKATIME_WIDGET_NO_WINDOW_STATE=1` don't remember
+  the window position (the file lives in the OS config folder).
 - `tools/probe-hackatime.mjs` lists the category names the live API reports (`HACKATIME_KEY=<key> node tools/probe-hackatime.mjs`).
 - `tools/preview/moods.mjs` checks the mascot's mood and line against the data state (empty, no key, offline).
 - `tools/fake-hackatime.mjs` local fake Hackatime (`PORT`, `KEY`, `FAIL_AI`, `FAIL_ALL`).

@@ -3,7 +3,7 @@
 
 use crate::config::{self, ConfigView, PomodoroLengths};
 use crate::error::Result;
-use crate::pomodoro::{Pomodoro, Snapshot};
+use crate::pomodoro::{Phase, Pomodoro, Snapshot};
 use crate::sessions::{self, SessionStore, Summary};
 use crate::stats::Stats;
 use crate::{activity, api, cache, focus_day};
@@ -33,12 +33,36 @@ struct Timer {
     app: OnceLock<AppHandle>,
     /// The notification permission is asked for once per run, on the first Pomodoro start.
     asked_permission: AtomicBool,
+    /// A phase the background tick saw finish (and notified about) that the UI hasn't been told yet.
+    /// The UI's next snapshot reports it, so the beep and mascot still fire when the widget was hidden.
+    unreported: Mutex<Option<Phase>>,
 }
 
 impl Timer {
-    /// Runs `act` on the timer, then returns its snapshot. Rolls the day over first, and saves
-    /// today's count whenever it changed.
+    /// Runs `act` on the timer, then returns its snapshot for the UI, including a phase end the
+    /// background tick already saw.
     fn with(&self, act: impl FnOnce(&mut Pomodoro, Instant)) -> Snapshot {
+        let mut snap = self.step(act);
+        let mut pending = self.unreported.lock().unwrap();
+        match snap.finished {
+            None => snap.finished = pending.take(),
+            Some(_) => *pending = None,
+        }
+        snap
+    }
+
+    /// Advances the timer while nobody is looking: keeps the notification on time when the widget is
+    /// hidden (the webview stops polling then). The phase end waits in `unreported` for the UI.
+    fn tick(&self) {
+        let snap = self.step(|_, _| {});
+        if snap.finished.is_some() {
+            *self.unreported.lock().unwrap() = snap.finished;
+        }
+    }
+
+    /// Runs `act`, rolling the day over first, and saves today's count whenever it changed.
+    /// A phase end is notified here, once: `finished` is reported by exactly one snapshot.
+    fn step(&self, act: impl FnOnce(&mut Pomodoro, Instant)) -> Snapshot {
         let now = Instant::now();
         let today = Local::now().date_naive();
         let mut t = self.state.lock().unwrap();
@@ -61,7 +85,7 @@ impl Timer {
             }
         };
         drop(known);
-        // `finished` is reported by exactly one snapshot, so this notifies once per phase end.
+        drop(t); // never show a notification (which may block) while holding the timer
         if let (Some(app), Some((title, body))) = (self.app.get(), notice::phase_end(&snap)) {
             let _ = app.notification().builder().title(title).body(body).show();
         }
@@ -78,7 +102,7 @@ impl Timer {
         self.began_unix.lock().unwrap().map(|(_, unix)| unix)
     }
 
-    /// Asks the OS for permission to notify (macOS prompts; elsewhere it is a no-op), once per run.
+    /// Asks the OS for permission to notify, once per run, on the first Pomodoro start rather than at launch.
     fn ask_permission_once(&self) {
         if let (Some(app), false) = (self.app.get(), self.asked_permission.swap(true, Ordering::Relaxed)) {
             let _ = app.notification().request_permission();
@@ -404,12 +428,18 @@ pub fn run() {
             began_unix: Mutex::new(None),
             app: OnceLock::new(),
             asked_permission: AtomicBool::new(false),
+            unreported: Mutex::new(None),
         })
         .manage(Sessions(Mutex::new(store)))
         .manage(Heartbeats(Mutex::new(activity::HeartbeatCache::default())))
         .manage(FocusBeats(Mutex::new(activity::HeartbeatCache::default())))
         .setup(move |app| {
             let _ = app.state::<Timer>().app.set(app.handle().clone());
+            let handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                handle.state::<Timer>().tick();
+            });
             // Keep WebView2/WebKit data beside the config instead of in the OS app-data dir.
             let data_dir = config::data_path("webview-data");
             let window_cfg = app.config().app.windows[0].clone();
