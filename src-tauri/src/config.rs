@@ -4,7 +4,7 @@ use crate::pomodoro::PomodoroConfig;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 pub const DEFAULT_BASE_URL: &str = "https://hackatime.hackclub.com/api/hackatime/v1";
 pub const DEFAULT_HOTKEY: &str = "CommandOrControl+Alt+Shift+H";
@@ -89,9 +89,9 @@ impl Config {
     }
 }
 
-/// Saves the window mode and/or positions: re-reads the file so nothing else in it is lost.
+/// Saves the window mode and/or positions; nothing else in the file is lost.
 pub fn save_window(mode: Option<Mode>, positions: &[(Mode, (i32, i32))]) -> Result<()> {
-    save(&load_file().with_window(mode, positions))
+    update(|c| Ok(c.with_window(mode, positions))).map(|_| ())
 }
 
 // ---- Where the config lives ------------------------------------------------
@@ -246,9 +246,9 @@ impl Config {
     }
 }
 
-/// Saves a new API key: re-reads the file so nothing else in it is lost.
+/// Saves a new API key; nothing else in the file is lost.
 pub fn save_api_key(key: &str) -> Result<()> {
-    save(&load_file().with_api_key(key)?)
+    update(|c| c.with_api_key(key)).map(|_| ())
 }
 
 /// The three lengths the settings UI edits, in minutes.
@@ -270,21 +270,48 @@ impl Config {
     }
 }
 
-/// Saves new timer lengths: re-reads the file so nothing else in it is lost. Returns the saved timer settings.
+/// Saves new timer lengths; nothing else in the file is lost. Returns the saved timer settings.
 pub fn save_lengths(lengths: PomodoroLengths) -> Result<PomodoroConfig> {
-    let cfg = load_file().with_lengths(lengths);
-    save(&cfg)?;
-    Ok(cfg.pomodoro)
+    update(|c| Ok(c.with_lengths(lengths))).map(|c| c.pomodoro)
 }
 
-/// Saves the quiet-mascot switch: re-reads the file so nothing else in it is lost.
+/// Saves the quiet-mascot switch; nothing else in the file is lost.
 pub fn save_quiet_mascot(quiet: bool) -> Result<()> {
-    save(&Config { quiet_mascot: quiet, ..load_file() })
+    update(|c| Ok(Config { quiet_mascot: quiet, ..c })).map(|_| ())
 }
 
-/// The config file as saved on disk (what the settings UI edits).
+/// The config file as saved on disk (what the settings UI edits). Unreadable reads as the defaults; that is fine
+/// for reading, but never for a save, which goes through `update`.
 pub fn load_file() -> Config {
-    std::fs::read_to_string(config_path()).ok().and_then(|s| parse(&s)).unwrap_or_default()
+    read_strict(&config_path()).ok().flatten().unwrap_or_default()
+}
+
+/// The file at `path`: `None` when there is none, an error when it exists but can't be read or parsed.
+fn read_strict(path: &Path) -> Result<Option<Config>> {
+    match std::fs::read_to_string(path) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(Error::Config(format!("{}: {e}", path.display()))),
+        Ok(text) => parse(&text).map(Some).ok_or_else(|| Error::Config(format!("{} is not valid config JSON; not overwriting it", path.display()))),
+    }
+}
+
+/// Every read-modify-write of the config file holds this lock, so two writers (the UI's settings, the window
+/// position flush, a mode switch) can never interleave and drop each other's change.
+static WRITE_LOCK: Mutex<()> = Mutex::new(());
+
+/// Reads the file, applies `change`, writes it back, all under `WRITE_LOCK`. A missing file starts from the
+/// defaults; a file that exists but can't be read or parsed is left alone and the change is refused, so a
+/// transient read error or a typo from a hand edit never replaces the user's config (and key) with defaults.
+fn update_at(path: &Path, change: impl FnOnce(Config) -> Result<Config>) -> Result<Config> {
+    let _guard = WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let cfg = change(read_strict(path)?.unwrap_or_default())?;
+    let json = serde_json::to_string_pretty(&cfg).map_err(|e| Error::Config(e.to_string()))?;
+    crate::fsutil::write_atomic(path, json.as_bytes())?;
+    Ok(cfg)
+}
+
+fn update(change: impl FnOnce(Config) -> Result<Config>) -> Result<Config> {
+    update_at(&config_path(), change)
 }
 
 /// The config the app actually uses: the file, plus env overrides and a detected `.wakatime.cfg`.
@@ -300,11 +327,6 @@ pub fn load() -> Config {
         }
     }
     cfg
-}
-
-pub fn save(cfg: &Config) -> Result<()> {
-    let json = serde_json::to_string_pretty(cfg).map_err(|e| Error::Config(e.to_string()))?;
-    crate::fsutil::write_atomic(&config_path(), json.as_bytes())
 }
 
 #[cfg(test)]
@@ -392,6 +414,68 @@ mod tests {
         let cfg = parse(r#"{"api_key":"k","ui_mode":"tiny","full_pos":"left","compact_pos":{"x":1}}"#).unwrap();
         assert_eq!((cfg.api_key.as_str(), cfg.ui_mode, cfg.full_pos, cfg.compact_pos), ("k", Mode::Full, None, None));
         assert_eq!(parse(r#"{"ui_mode":"compact","compact_pos":null}"#).unwrap().ui_mode, Mode::Compact);
+    }
+
+    fn temp_file(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("hackatime-widget-test-cfg-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir.join("config.json")
+    }
+
+    #[test]
+    fn a_missing_file_starts_from_the_defaults() {
+        let path = temp_file("missing");
+        let saved = update_at(&path, |c| Ok(c.with_window(Some(Mode::Compact), &[]))).unwrap();
+        assert_eq!((saved.ui_mode, saved.refresh_secs), (Mode::Compact, 300));
+        assert_eq!(read_strict(&path).unwrap().unwrap().ui_mode, Mode::Compact);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn a_corrupt_file_is_left_untouched() {
+        let path = temp_file("corrupt");
+        let text = "{\"api_key\":\"11111111-2222-3333-4444-555555555555\", oops";
+        std::fs::write(&path, text).unwrap();
+        let err = update_at(&path, |c| Ok(c.with_window(Some(Mode::Compact), &[(Mode::Compact, (1, 2))]))).unwrap_err();
+        assert_eq!(err.code(), "config");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+        // A refused change is never applied, even partly.
+        assert!(update_at(&path, |_| panic!("must not run on a corrupt file")).is_err());
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn a_failing_change_writes_nothing() {
+        let path = temp_file("failing");
+        std::fs::write(&path, r#"{"api_key":"k"}"#).unwrap();
+        assert!(update_at(&path, |c| c.with_api_key("not a key")).is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), r#"{"api_key":"k"}"#);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn concurrent_updates_do_not_lose_fields() {
+        let path = temp_file("concurrent");
+        std::fs::write(&path, r#"{"api_key":"k"}"#).unwrap();
+        let writers: Vec<Box<dyn Fn(i32, Config) -> Config + Send + Sync>> = vec![
+            Box::new(|i, c| c.with_window(None, &[(Mode::Compact, (i, i))])),
+            Box::new(|i, c| c.with_window(Some(Mode::Compact), &[(Mode::Full, (-i, i))])),
+            Box::new(|_, c| Config { quiet_mascot: true, ..c }),
+            Box::new(|_, c| c.with_lengths(PomodoroLengths { focus_min: 50, short_break_min: 10, long_break_min: 30 })),
+        ];
+        std::thread::scope(|s| {
+            for w in &writers {
+                let path = &path;
+                s.spawn(move || for i in 0..40 { update_at(path, |c| Ok(w(i, c))).unwrap(); });
+            }
+        });
+        let cfg = read_strict(&path).unwrap().unwrap();
+        assert_eq!(cfg.api_key, "k");
+        assert_eq!((cfg.pos_for(Mode::Compact), cfg.pos_for(Mode::Full), cfg.ui_mode), (Some((39, 39)), Some((-39, 39)), Mode::Compact));
+        assert!(cfg.quiet_mascot);
+        assert_eq!(cfg.pomodoro.focus_min, 50);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
     #[test]
