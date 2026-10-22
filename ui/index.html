@@ -202,7 +202,11 @@
       <button class="btn btn--block" id="picker-close" type="button">Done</button>
     </section>
   </main>
-  <!-- The compact pill: shown instead of .card when html[data-mode="compact"]. Click or Enter expands. -->
+  <i class="deco deco-a" aria-hidden="true"></i>
+  <i class="deco deco-b" aria-hidden="true"></i>
+  </div>
+  <!-- The compact pill: shown instead of .shell when html[data-mode="compact"]. Click or Enter expands. It sits
+       outside .shell (whose theme filters would re-anchor position: fixed), pinned to the window's top-right. -->
   <button class="pill" id="pill" type="button" aria-label="Hackatime. Click to expand.">
     <canvas class="pill__mascot" id="pill-mascot" width="16" height="16" aria-hidden="true"></canvas>
     <span class="pill__main">
@@ -214,9 +218,8 @@
       <span class="pill__ai" id="pill-ai"></span>
     </span>
   </button>
-  <i class="deco deco-a" aria-hidden="true"></i>
-  <i class="deco deco-b" aria-hidden="true"></i>
-  </div>
+  <!-- The surface that travels between the card's box and the pill's box during the morph (mode.js). -->
+  <i class="morph" id="morph" aria-hidden="true"></i>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

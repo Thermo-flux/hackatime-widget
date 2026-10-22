@@ -1,24 +1,40 @@
 /* ---- Compact mode: a 220x40 pill instead of the card (Phase 7) ----
-   html[data-mode="compact"] is set by mode.js. The window is 240x60, so the body padding is the 10px margin that
-   holds the pill's shadow. Every colour comes from the theme's tokens, so all 13 themes work. */
-.pill { display: none; }
+   html[data-mode="compact"] is set by mode.js. The window is then 240x60: the pill is pinned 10px from the
+   window's top and right, and that margin holds its shadow. The pill is pinned to the top-RIGHT on purpose: in the
+   full window during the morph and in the small window after it, it sits at the same spot on screen, because the
+   window shrinks and grows around its top-right corner (Rust's set_mode).
+   One shared look for every theme: no silhouettes or decorations, colours from the theme's tokens only.
 
-:root[data-mode="compact"] body { padding: 10px; }
-:root[data-mode="compact"] .shell { filter: none; clip-path: none; mask: none; }
-:root[data-mode="compact"] .shell::before, :root[data-mode="compact"] .shell::after { display: none; }
-:root[data-mode="compact"] .card, :root[data-mode="compact"] .deco { display: none; }
+   Morph states (mode.js), on <html>:
+   .is-morphing  the card <-> pill animation runs; .morph is the travelling surface, .pill shows only its
+                 content (the surface is .morph's job until the end, so the hand-over is invisible: same box, same look).
+   .is-snapping  the window is being resized; the page hides for those frames so the in-between geometry is never seen. */
+:root { --pill-w: 220px; --pill-h: 40px; --pill-margin: 10px; --pill-radius: 20px; }
 
-:root[data-mode="compact"] .pill {
+.pill, .morph { display: none; }
+
+/* The one pill surface, shared by the pill and the travelling morph surface. */
+.pill, .morph {
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--pill-radius); /* half the height: fully rounded */
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 2px 8px rgb(0 0 0 / 0.22);
+}
+
+/* In compact mode the whole themed widget (card, silhouette filters, decorations) is gone. */
+:root[data-mode="compact"] .shell { display: none; }
+
+:root[data-mode="compact"] .pill, :root.is-morphing .pill {
   display: flex;
+  position: fixed;
+  z-index: 2;
+  top: var(--pill-margin);
+  right: var(--pill-margin);
   align-items: center;
   gap: var(--space-2);
-  width: 220px;
-  height: 40px;
+  width: var(--pill-w);
+  height: var(--pill-h);
   padding: 0 14px 0 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--bg) 94%, transparent);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 2px 8px rgb(0 0 0 / 0.22);
   color: var(--fg);
   font: inherit;
   cursor: pointer;
@@ -26,6 +42,13 @@
   overflow: hidden;
 }
 .pill:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* During the morph: the surface travels on .morph (under the card), the pill carries only its content. */
+:root.is-morphing .morph { display: block; position: fixed; z-index: 0; pointer-events: none; }
+:root.is-morphing .shell { z-index: 1; }
+:root.is-morphing .pill { background: transparent; border-color: transparent; box-shadow: none; }
+:root.is-morphing body { pointer-events: none; }
+:root.is-snapping body { visibility: hidden; }
 
 .pill__mascot { flex: none; width: 20px; height: 20px; image-rendering: pixelated; }
 .pill__main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }

@@ -6,6 +6,8 @@ import * as sessions from "./sessions.js";
 import * as mascot from "./mascot.js";
 import * as themes from "./themes.js";
 import { fitTiles } from "./fit.js";
+import * as mode from "./mode.js";
+import * as pill from "./pill.js";
 
 const TABS = ["stats", "sessions", "pomodoro"];
 
@@ -51,6 +53,11 @@ themes.init();
 stats.init();
 sessions.init();
 pomodoro.init();
+
+// Start in the mode the widget was left in (Rust already sized the window for it). An init script set
+// data-mode="compact" before the first paint when starting compact; this confirms it and starts the pill.
+pill.bind(() => mode.setMode("full"));
+invoke("get_config").then((cfg) => mode.init(cfg.ui_mode), () => mode.init(mode.getMode()));
 
 // Don't poll the backend while the window is hidden.
 document.addEventListener("visibilitychange", () => {

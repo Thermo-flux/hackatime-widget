@@ -79,7 +79,16 @@
   const config = () => ({
     has_key: scenario !== "no_key", refresh_secs: 300, mock: scenario === "mock",
     pomodoro: { ...POMO, long_break_every: 4, auto_start: false },
+    compact_hotkey: "CommandOrControl+Alt+Shift+H", ui_mode: "full",
   });
+  // set_mode can't resize a browser page: it answers like Rust would for a window that didn't have to be clamped,
+  // unless a test sets window.__TAURI_STUB__.shift = [x, y] (logical px clamping moved the window by).
+  const setMode = (a) => {
+    const [width, height] = a.mode === "compact" ? [240, 60] : [320, 436];
+    const [shift_x, shift_y] = window.__TAURI_STUB__.shift ?? [0, 0];
+    window.__TAURI_STUB__.modeCalls.push(a.mode);
+    return { mode: a.mode, x: 100, y: 100, width, height, scale: 1, shift_x, shift_y };
+  };
 
   // "offline" has no saved copy; "offline_cached" has one from 14:02 and then fails like "offline".
   const cachedAt = () => { const d = new Date(); d.setHours(14, 2, 0, 0); return Math.floor(d.getTime() / 1000); };
@@ -90,6 +99,7 @@
     get_config: config,
     set_quiet_mascot: () => null,
     hide_window: () => null,
+    set_mode: (a) => setMode(a),
     set_api_key: () => null,
     "plugin:opener|open_url": () => null,
     set_pomodoro: (a) => { const p = { ...pomo(), ...a.lengths }; const idle = p.remaining_secs >= p.total_secs; const t = (p.phase === "focus" ? p.focus_min : p.phase === "short_break" ? p.short_break_min : p.long_break_min) * 60; return idle ? { ...p, total_secs: t, remaining_secs: t } : p; },
@@ -111,7 +121,7 @@
     pomodoro_state: pomo, pomodoro_start: pomo, pomodoro_pause: pomo, pomodoro_reset: pomo, pomodoro_skip: pomo,
   };
 
-  window.__TAURI_STUB__ = { scenario, handlers };
+  window.__TAURI_STUB__ = { scenario, handlers, modeCalls: [] };
   window.__TAURI__ = {
     core: {
       invoke(cmd, args) {
