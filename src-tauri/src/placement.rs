@@ -24,19 +24,31 @@ impl Rect {
     }
 }
 
-/// Where a window of `size` at `pos` should sit so it is fully inside one of the `areas` (work areas,
-/// the first being the primary monitor). The area it overlaps most is used; if it overlaps none, the
-/// first. A window larger than the area is pinned to the area's top-left.
-pub fn clamp_into(pos: (i32, i32), size: (u32, u32), areas: &[Rect]) -> (i32, i32) {
-    let window = Rect { x: pos.0, y: pos.1, w: size.0, h: size.1 };
-    let Some(area) = areas.iter().filter(|a| window.overlap(a) > 0).max_by_key(|a| window.overlap(a)).or(areas.first()) else {
-        return pos;
-    };
+/// Index of the area `window` overlaps most; if it overlaps none, the first (the primary monitor).
+pub fn area_for(window: &Rect, areas: &[Rect]) -> Option<usize> {
+    let best = areas.iter().enumerate().filter(|(_, a)| window.overlap(a) > 0).max_by_key(|(_, a)| window.overlap(a));
+    best.map(|(i, _)| i).or(if areas.is_empty() { None } else { Some(0) })
+}
+
+/// Moves a window of `size` at `pos` the least it takes to be fully inside `area`.
+/// A window larger than the area is pinned to the area's top-left (the title and close button stay reachable).
+pub fn fit_into(pos: (i32, i32), size: (u32, u32), area: &Rect) -> (i32, i32) {
     let fit = |v: i32, start: i32, room: u32, len: u32| {
         let max = start as i64 + room as i64 - len as i64;
         (v as i64).min(max).max(start as i64) as i32
     };
     (fit(pos.0, area.x, area.w, size.0), fit(pos.1, area.y, area.h, size.1))
+}
+
+/// Where a window of `size` at `pos` should sit so it is fully inside one of the `areas` (work areas,
+/// the first being the primary monitor). The area it overlaps most is used; if it overlaps none, the
+/// first. A window larger than the area is pinned to the area's top-left.
+pub fn clamp_into(pos: (i32, i32), size: (u32, u32), areas: &[Rect]) -> (i32, i32) {
+    let window = Rect { x: pos.0, y: pos.1, w: size.0, h: size.1 };
+    match area_for(&window, areas) {
+        Some(i) => fit_into(pos, size, &areas[i]),
+        None => pos,
+    }
 }
 
 #[cfg(test)]
@@ -68,6 +80,19 @@ mod tests {
         assert_eq!(clamp_into((1900, 100), (320, 436), &[A, B]), (1920, 100));
         // Mostly on A.
         assert_eq!(clamp_into((1700, 100), (320, 436), &[A, B]), (1600 + 0, 100));
+    }
+
+    #[test]
+    fn area_for_prefers_most_overlap_then_the_first() {
+        assert_eq!(area_for(&Rect { x: 1900, y: 0, w: 100, h: 10 }, &[A, B]), Some(1));
+        assert_eq!(area_for(&Rect { x: 9000, y: 0, w: 100, h: 10 }, &[A, B]), Some(0));
+        assert_eq!(area_for(&Rect { x: 0, y: 0, w: 1, h: 1 }, &[]), None);
+    }
+
+    #[test]
+    fn fit_into_one_area_ignores_the_others() {
+        // Hanging off B's left edge into A: pulled into B, not A.
+        assert_eq!(fit_into((1800, 10), (320, 436), &B), (1920, 10));
     }
 
     #[test]

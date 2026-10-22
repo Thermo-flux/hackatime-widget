@@ -13,6 +13,8 @@ pub enum Error {
     InvalidKey,
     #[error("config error: {0}")]
     Config(String),
+    #[error("window error: {0}")]
+    Window(String),
 }
 
 /// Drops the request URL from the error, so the server address (and anything in it) never reaches the UI.
@@ -32,6 +34,7 @@ impl Error {
             Error::Status(_) => "server",
             Error::InvalidKey => "invalid_key",
             Error::Config(_) => "config",
+            Error::Window(_) => "window",
         }
     }
 }
@@ -58,6 +61,7 @@ mod tests {
         assert_eq!(Error::Status(401).code(), "unauthorized");
         assert_eq!(Error::Status(403).code(), "unauthorized");
         assert_eq!(Error::Status(500).code(), "server");
+        assert_eq!(Error::Window("x".into()).code(), "window");
     }
 
     #[test]

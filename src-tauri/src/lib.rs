@@ -10,6 +10,7 @@ mod config;
 mod error;
 mod focus_day;
 mod fsutil;
+mod modes;
 mod notice;
 mod placement;
 mod pomodoro;

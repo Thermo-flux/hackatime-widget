@@ -1,6 +1,8 @@
 use crate::error::{Error, Result};
+use crate::modes::Mode;
 use crate::pomodoro::PomodoroConfig;
-use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -20,7 +22,28 @@ pub struct Config {
     pub quiet_mascot: bool,
     /// Global shortcut that toggles compact mode.
     pub compact_hotkey: String,
+    /// Full widget or compact pill; the app starts in the mode it was left in.
+    #[serde(deserialize_with = "lenient")]
+    pub ui_mode: Mode,
+    /// Window position per mode (outer top-left, physical pixels; see `modes.rs` for why physical).
+    #[serde(deserialize_with = "lenient")]
+    pub full_pos: Option<WindowPos>,
+    #[serde(deserialize_with = "lenient")]
+    pub compact_pos: Option<WindowPos>,
     pub pomodoro: PomodoroConfig,
+}
+
+/// A broken window-state value (hand edit, older or newer app) falls back to its default instead of
+/// failing the whole file, which would also drop the API key.
+fn lenient<'de, D: Deserializer<'de>, T: DeserializeOwned + Default>(d: D) -> std::result::Result<T, D::Error> {
+    let v = serde_json::Value::deserialize(d)?;
+    Ok(serde_json::from_value(v).unwrap_or_default())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WindowPos {
+    pub x: i32,
+    pub y: i32,
 }
 
 impl Default for Config {
@@ -32,9 +55,43 @@ impl Default for Config {
             mock: false,
             quiet_mascot: false,
             compact_hotkey: DEFAULT_HOTKEY.into(),
+            ui_mode: Mode::Full,
+            full_pos: None,
+            compact_pos: None,
             pomodoro: PomodoroConfig::default(),
         }
     }
+}
+
+impl Config {
+    /// The position remembered for `mode`.
+    pub fn pos_for(&self, mode: Mode) -> Option<(i32, i32)> {
+        let p = match mode {
+            Mode::Full => self.full_pos,
+            Mode::Compact => self.compact_pos,
+        };
+        p.map(|p| (p.x, p.y))
+    }
+
+    /// This config with the window state changed: the mode (when given) and positions per mode. The rest is kept.
+    pub fn with_window(mut self, mode: Option<Mode>, positions: &[(Mode, (i32, i32))]) -> Self {
+        if let Some(m) = mode {
+            self.ui_mode = m;
+        }
+        for &(m, (x, y)) in positions {
+            let slot = match m {
+                Mode::Full => &mut self.full_pos,
+                Mode::Compact => &mut self.compact_pos,
+            };
+            *slot = Some(WindowPos { x, y });
+        }
+        self
+    }
+}
+
+/// Saves the window mode and/or positions: re-reads the file so nothing else in it is lost.
+pub fn save_window(mode: Option<Mode>, positions: &[(Mode, (i32, i32))]) -> Result<()> {
+    save(&load_file().with_window(mode, positions))
 }
 
 // ---- Where the config lives ------------------------------------------------
@@ -153,6 +210,8 @@ pub struct ConfigView {
     pub refresh_secs: u64,
     pub mock: bool,
     pub quiet_mascot: bool,
+    pub compact_hotkey: String,
+    pub ui_mode: Mode,
     pub pomodoro: PomodoroConfig,
 }
 
@@ -163,6 +222,8 @@ impl From<&Config> for ConfigView {
             refresh_secs: c.refresh_secs,
             mock: c.mock,
             quiet_mascot: c.quiet_mascot,
+            compact_hotkey: c.compact_hotkey.clone(),
+            ui_mode: c.ui_mode,
             pomodoro: c.pomodoro.clone(),
         }
     }
@@ -302,6 +363,35 @@ mod tests {
         // And it survives a save/load round trip.
         let back = parse(&serde_json::to_string_pretty(&out).unwrap()).unwrap();
         assert_eq!((back.api_key.as_str(), back.pomodoro.focus_min, back.pomodoro.long_break_min), ("k", 50, 90));
+    }
+
+    #[test]
+    fn window_state_defaults_to_full_with_no_positions() {
+        let cfg = parse("{}").unwrap();
+        assert_eq!((cfg.ui_mode, cfg.full_pos, cfg.compact_pos), (Mode::Full, None, None));
+        let view = ConfigView::from(&cfg);
+        assert_eq!((view.ui_mode, view.compact_hotkey.as_str()), (Mode::Full, DEFAULT_HOTKEY));
+    }
+
+    #[test]
+    fn window_state_survives_a_round_trip_and_keeps_the_rest() {
+        let cfg = parse(r#"{"api_key":"k","quiet_mascot":true,"full_pos":{"x":5,"y":6}}"#).unwrap();
+        let out = cfg.with_window(Some(Mode::Compact), &[(Mode::Compact, (-1200, 40)), (Mode::Full, (-1280, 40))]);
+        let back = parse(&serde_json::to_string_pretty(&out).unwrap()).unwrap();
+        assert_eq!(back.ui_mode, Mode::Compact);
+        assert_eq!(back.pos_for(Mode::Compact), Some((-1200, 40)));
+        assert_eq!(back.pos_for(Mode::Full), Some((-1280, 40)));
+        assert_eq!((back.api_key.as_str(), back.quiet_mascot), ("k", true));
+        // Only a position: the mode is kept.
+        let moved = back.with_window(None, &[(Mode::Compact, (1, 2))]);
+        assert_eq!((moved.ui_mode, moved.pos_for(Mode::Compact), moved.pos_for(Mode::Full)), (Mode::Compact, Some((1, 2)), Some((-1280, 40))));
+    }
+
+    #[test]
+    fn a_broken_window_state_does_not_lose_the_key() {
+        let cfg = parse(r#"{"api_key":"k","ui_mode":"tiny","full_pos":"left","compact_pos":{"x":1}}"#).unwrap();
+        assert_eq!((cfg.api_key.as_str(), cfg.ui_mode, cfg.full_pos, cfg.compact_pos), ("k", Mode::Full, None, None));
+        assert_eq!(parse(r#"{"ui_mode":"compact","compact_pos":null}"#).unwrap().ui_mode, Mode::Compact);
     }
 
     #[test]
