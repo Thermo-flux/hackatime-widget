@@ -56,10 +56,18 @@
   };
 
   const POMO = { focus_min: 25, short_break_min: 5, long_break_min: 15 };
+  let pomoCalls = 0;
   const pomo = () => {
+    pomoCalls += 1;
     const base = { running: false, focus_started_at: null, completed_focus: scenario === "pomo_many" ? 12 : 2, long_break_every: 4, finished: null, ...POMO };
     switch (scenario) {
       case "pomo_running": return { ...base, focus_started_at: Math.floor(Date.now() / 1000) - 17 * 60, phase: "focus", running: true, remaining_secs: 17 * 60 + 23, total_secs: 1500 };
+      // A focus round that ends on the third poll: the phase-end line depends on how much of it was coded.
+      case "pomo_finishing": case "pomo_finishing_low": {
+        if (pomoCalls < 3) return { ...base, focus_started_at: Math.floor(Date.now() / 1000) - 17 * 60, phase: "focus", running: true, remaining_secs: 5, total_secs: 1500 };
+        return { ...base, phase: "short_break", remaining_secs: 300, total_secs: 300, completed_focus: 3, finished: pomoCalls === 3 ? "focus" : null };
+      }
+      case "pomo_nolong": return { ...base, long_break_every: 0, completed_focus: 3, phase: "focus", remaining_secs: 1500, total_secs: 1500 };
       case "pomo_many": return { ...base, phase: "focus", remaining_secs: 1500, total_secs: 1500 };
       case "pomo_paused": return { ...base, phase: "focus", remaining_secs: 9 * 60 + 40, total_secs: 1500 };
       case "pomo_break": return { ...base, phase: "short_break", running: true, remaining_secs: 3 * 60 + 12, total_secs: 300 };
@@ -92,7 +100,10 @@
     session_state: sessionView,
     session_start: () => null,
     session_stop: () => true,
-    focus_activity: () => (scenario === "pomo_running" ? { elapsed_secs: 17 * 60, active_secs: 14 * 60 } : null),
+    focus_activity: () => {
+      const coded = { pomo_running: 14, pomo_finishing: 15, pomo_finishing_low: 3 }[scenario];
+      return coded === undefined ? null : { elapsed_secs: 17 * 60, active_secs: coded * 60 };
+    },
     pomodoro_state: pomo, pomodoro_start: pomo, pomodoro_pause: pomo, pomodoro_reset: pomo, pomodoro_skip: pomo,
   };
 

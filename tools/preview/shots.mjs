@@ -7,7 +7,7 @@ import { startServer } from "./serve.mjs";
 
 export const SCENARIOS = [
   "normal", "no_key", "unauthorized", "offline", "offline_cached", "zero", "ai_unavailable", "huge", "session_live",
-  "session_live_noactivity", "sessions_empty", "pomo_running", "pomo_paused", "pomo_break", "mock",
+  "session_live_noactivity", "sessions_empty", "pomo_running", "pomo_paused", "pomo_break", "pomo_many", "pomo_nolong", "pomo_finishing", "pomo_finishing_low", "down", "mock",
 ];
 const TABS = ["stats", "sessions", "pomodoro"];
 

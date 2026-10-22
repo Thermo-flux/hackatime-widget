@@ -53,24 +53,29 @@ const MAX_DOTS = 8;
 function renderDots(s) {
   const done = s.completed_focus;
   const box = $("pomo-dots");
-  if (done > MAX_DOTS) {
+  const cycle = s.long_break_every; // 0: no long breaks, so just count today's sessions
+  if (cycle === 0 && done > MAX_DOTS) {
     box.replaceChildren(`●×${done}`);
     return;
   }
-  const cycle = Math.min(MAX_DOTS, s.long_break_every > 0 ? s.long_break_every : 4);
+  if (cycle === 0) {
+    box.replaceChildren(...Array.from({ length: done }, () => dotEl(true)));
+    return;
+  }
   // During the long break the cycle just completed stays full; after it, the row empties for the next one.
   const filled = done > 0 && done % cycle === 0 && s.phase === "long_break" ? cycle : done % cycle;
-  box.replaceChildren(
-    ...Array.from({ length: cycle }, (_, i) => {
-      const dot = document.createElement("span");
-      dot.className = i < filled ? "pdot pdot--on" : "pdot";
-      return dot;
-    }),
-  );
+  box.replaceChildren(...Array.from({ length: cycle }, (_, i) => dotEl(i < filled)));
+}
+
+function dotEl(on) {
+  const dot = document.createElement("span");
+  dot.className = on ? "pdot pdot--on" : "pdot";
+  return dot;
 }
 
 function render(s) {
   const prev = state;
+  const round = coded; // the finished round's numbers, before a phase change clears them
   state = s;
   const label = LABELS[s.phase];
   const time = mmss(s.remaining_secs);
@@ -104,18 +109,18 @@ function render(s) {
   $("pomo-count").textContent = s.completed_focus > MAX_DOTS ? "today" : `${s.completed_focus} today`; // the dots row already holds the number when it collapses
   document.title = s.running ? `${time} - ${label}` : "Hackatime";
   if (!prev || prev.focus_started_at !== s.focus_started_at || prev.phase !== s.phase) {
-    if (s.phase !== "focus" || !s.focus_started_at) { if (!s.finished) coded = null; paintCoded(); }
+    if (s.phase !== "focus" || !s.focus_started_at) { coded = null; paintCoded(); }
     else refreshCoded();
   }
 
   $("pomo-reset").disabled = mode === "idle" && !pendingLengths(s);
 
   signal("pomo", { running: s.running, phase: s.phase });
-  if (s.finished === "focus" && coded && coded.elapsed_secs > 0) {
+  if (s.finished === "focus" && round && round.elapsed_secs > 0) {
     // How the round went, from the last activity poll (at most a minute old).
     chime();
-    focusEnd((coded.active_secs / coded.elapsed_secs) * 100);
-    announce(`${LABELS[s.finished]} done. You coded ${short(coded.active_secs)} of ${short(coded.elapsed_secs)}. ${label} next, ${mmss(s.total_secs)}.`);
+    focusEnd((round.active_secs / round.elapsed_secs) * 100);
+    announce(`${LABELS[s.finished]} done. You coded ${short(round.active_secs)} of ${short(round.elapsed_secs)}. ${label} next, ${mmss(s.total_secs)}.`);
   } else if (s.finished) {
     chime();
     cheer();

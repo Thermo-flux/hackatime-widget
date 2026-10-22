@@ -97,9 +97,14 @@ impl Pomodoro {
         self.completed_focus
     }
 
-    /// How long ago the current focus phase first started running, if it has.
-    pub fn focus_elapsed(&self, now: Instant) -> Option<Duration> {
-        (self.phase == Phase::Focus).then_some(self.began?).map(|b| now.saturating_duration_since(b))
+    /// When the current focus phase first started running, if it has.
+    pub fn focus_began(&self) -> Option<Instant> {
+        if self.phase == Phase::Focus { self.began } else { None }
+    }
+
+    #[cfg(test)]
+    fn focus_elapsed(&self, now: Instant) -> Option<Duration> {
+        self.focus_began().map(|b| now.saturating_duration_since(b))
     }
 
     /// Starts today's count over when the local date has moved on. Returns whether it did.
@@ -279,6 +284,20 @@ mod tests {
         assert_eq!(p.completed_focus(), 0);
         assert!(p.snapshot(t0 + 10 * MIN).running, "midnight must not stop a running timer");
         assert!(!p.roll_day(day(22)));
+    }
+
+    #[test]
+    fn a_finished_focus_round_survives_a_restart() {
+        let path = std::env::temp_dir().join(format!("hackatime-pomo-restart-{}", std::process::id())).join("pomodoro-day.json");
+        let (mut p, t0) = (Pomodoro::new(PomodoroConfig::default(), day(21), 0), Instant::now());
+        p.start(t0);
+        let done = p.snapshot(t0 + 25 * MIN).completed_focus;
+        crate::focus_day::save(&path, day(21), done).unwrap();
+        // "Restart": a new timer is built from what the file says for today, and for a later day it starts over.
+        let same_day = Pomodoro::new(PomodoroConfig::default(), day(21), crate::focus_day::load(&path, day(21)));
+        assert_eq!(same_day.completed_focus(), 1);
+        let next_day = Pomodoro::new(PomodoroConfig::default(), day(22), crate::focus_day::load(&path, day(22)));
+        assert_eq!(next_day.completed_focus(), 0);
     }
 
     #[test]

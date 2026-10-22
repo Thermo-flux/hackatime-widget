@@ -18,6 +18,9 @@ struct Timer {
     state: Mutex<Pomodoro>,
     /// Sample-data mode never writes files, so today's count stays in memory there.
     persist: bool,
+    /// Wall-clock start of the running focus phase, fixed when first seen. Recomputing it from the
+    /// clock on every call would wobble by a second and look like a new phase to the UI and the cache.
+    began_unix: Mutex<Option<(Instant, i64)>>,
 }
 
 impl Timer {
@@ -30,8 +33,22 @@ impl Timer {
         let before = (t.completed_focus(), t.roll_day(today));
         act(&mut t, now);
         let mut snap = t.snapshot(now);
-        let elapsed = t.focus_elapsed(now);
-        snap.focus_started_at = elapsed.map(|e| Utc::now().timestamp() - e.as_secs() as i64);
+        let mut known = self.began_unix.lock().unwrap();
+        snap.focus_started_at = match t.focus_began() {
+            None => {
+                *known = None;
+                None
+            }
+            Some(began) => {
+                let unix = match *known {
+                    Some((at, unix)) if at == began => unix,
+                    _ => Utc::now().timestamp() - now.saturating_duration_since(began).as_secs() as i64,
+                };
+                *known = Some((began, unix));
+                Some(unix)
+            }
+        };
+        drop(known);
         if self.persist && (snap.completed_focus != before.0 || before.1) {
             // The count is a convenience: failing to save it must not break the timer.
             let _ = focus_day::save(&config::data_path("pomodoro-day.json"), today, snap.completed_focus);
@@ -215,7 +232,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(Timer { state: Mutex::new(Pomodoro::new(cfg.pomodoro, today, saved_count)), persist: !cfg.mock })
+        .manage(Timer { state: Mutex::new(Pomodoro::new(cfg.pomodoro, today, saved_count)), persist: !cfg.mock, began_unix: Mutex::new(None) })
         .manage(Sessions(Mutex::new(store)))
         .manage(Heartbeats(Mutex::new(activity::HeartbeatCache::default())))
         .manage(FocusBeats(Mutex::new(activity::HeartbeatCache::default())))

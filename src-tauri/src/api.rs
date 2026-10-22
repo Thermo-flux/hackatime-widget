@@ -104,11 +104,16 @@ pub fn origin(base_url: &str) -> String {
     }
 }
 
+/// The first moment of `day` in `tz`. Where a DST change skips midnight, that is the first hour that
+/// exists, never "now": a wrong boundary would make the two periods overlap.
+fn day_start<Tz: TimeZone>(tz: &Tz, day: NaiveDate) -> chrono::DateTime<Tz> {
+    (0..24)
+        .find_map(|h| tz.from_local_datetime(&day.and_hms_opt(h, 0, 0).unwrap()).earliest())
+        .unwrap_or_else(|| tz.from_utc_datetime(&day.and_hms_opt(0, 0, 0).unwrap()))
+}
+
 fn local_midnight(day: NaiveDate) -> chrono::DateTime<Local> {
-    Local
-        .from_local_datetime(&day.and_hms_opt(0, 0, 0).unwrap())
-        .earliest()
-        .unwrap_or_else(Local::now)
+    day_start(&Local, day)
 }
 
 fn local_midnight_iso(day: NaiveDate) -> String {
@@ -166,7 +171,13 @@ fn mock_stats(range: Range) -> Result<Stats> {
         let last = resp.data.pop();
         resp.data = last.into_iter().collect();
     }
-    Ok(Stats { mock: true, ..aggregate(resp) })
+    // Today's sample compares with the day before it, so demo mode shows the comparison line too.
+    let previous = matches!(range, Range::Today).then(|| {
+        let full: SummariesResponse = serde_json::from_str(SAMPLE).ok()?;
+        let n = full.data.len().checked_sub(2)?;
+        Some(full.data[n].grand_total.total_seconds)
+    });
+    Ok(Stats { mock: true, previous_total_seconds: previous.flatten(), ..aggregate(resp) })
 }
 
 pub async fn fetch_stats(cfg: &Config, range: Range) -> Result<Stats> {
@@ -249,6 +260,18 @@ mod tests {
         // 30d on 15 Mar 2026: this is 14 Feb..15 Mar, before it is 15 Jan..13 Feb.
         assert_eq!(Range::Last30.previous_window(d(2026, 3, 15)), Some((d(2026, 1, 15), d(2026, 2, 14))));
     }
+
+    #[test]
+    fn a_day_starts_at_its_own_midnight() {
+        let tz = chrono::FixedOffset::east_opt(2 * 3600).unwrap();
+        let start = day_start(&tz, d(2026, 3, 29));
+        assert_eq!(start.to_rfc3339(), "2026-03-29T00:00:00+02:00");
+        // Midnight to midnight is 24 hours in a zone without a DST change.
+        assert_eq!((day_start(&tz, d(2026, 3, 30)) - start).num_hours(), 24);
+    }
+
+    // `day_start` steps to the first existing hour where DST skips midnight; chrono has no zone
+    // database in this build, so that branch can't be exercised here without adding a dependency.
 
     #[test]
     fn previous_windows_are_whole_calendar_days_across_dst() {
