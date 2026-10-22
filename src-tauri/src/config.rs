@@ -15,6 +15,8 @@ pub struct Config {
     pub refresh_secs: u64,
     /// Serve bundled sample data instead of calling the API.
     pub mock: bool,
+    /// The mascot keeps its faces but only speaks when petted.
+    pub quiet_mascot: bool,
     pub pomodoro: PomodoroConfig,
 }
 
@@ -25,6 +27,7 @@ impl Default for Config {
             base_url: DEFAULT_BASE_URL.into(),
             refresh_secs: 300,
             mock: false,
+            quiet_mascot: false,
             pomodoro: PomodoroConfig::default(),
         }
     }
@@ -145,12 +148,19 @@ pub struct ConfigView {
     pub has_key: bool,
     pub refresh_secs: u64,
     pub mock: bool,
+    pub quiet_mascot: bool,
     pub pomodoro: PomodoroConfig,
 }
 
 impl From<&Config> for ConfigView {
     fn from(c: &Config) -> Self {
-        Self { has_key: !c.api_key.trim().is_empty(), refresh_secs: c.refresh_secs, mock: c.mock, pomodoro: c.pomodoro.clone() }
+        Self {
+            has_key: !c.api_key.trim().is_empty(),
+            refresh_secs: c.refresh_secs,
+            mock: c.mock,
+            quiet_mascot: c.quiet_mascot,
+            pomodoro: c.pomodoro.clone(),
+        }
     }
 }
 
@@ -200,6 +210,11 @@ pub fn save_lengths(lengths: PomodoroLengths) -> Result<PomodoroConfig> {
     let cfg = load_file().with_lengths(lengths);
     save(&cfg)?;
     Ok(cfg.pomodoro)
+}
+
+/// Saves the quiet-mascot switch: re-reads the file so nothing else in it is lost.
+pub fn save_quiet_mascot(quiet: bool) -> Result<()> {
+    save(&Config { quiet_mascot: quiet, ..load_file() })
 }
 
 /// The config file as saved on disk (what the settings UI edits).
@@ -256,6 +271,15 @@ mod tests {
     fn out_of_range_pomodoro_lengths_are_clamped_on_load() {
         let cfg = parse(r#"{"pomodoro":{"focus_min":0,"short_break_min":500,"long_break_min":91}}"#).unwrap();
         assert_eq!((cfg.pomodoro.focus_min, cfg.pomodoro.short_break_min, cfg.pomodoro.long_break_min), (1, 60, 90));
+    }
+
+    #[test]
+    fn quiet_mascot_defaults_off_and_survives_a_round_trip() {
+        assert!(!parse("{}").unwrap().quiet_mascot);
+        let cfg = parse(r#"{"api_key":"k","quiet_mascot":true}"#).unwrap();
+        let back = parse(&serde_json::to_string(&cfg).unwrap()).unwrap();
+        assert!(back.quiet_mascot);
+        assert_eq!(back.api_key, "k");
     }
 
     #[test]

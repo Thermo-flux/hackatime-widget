@@ -1,7 +1,7 @@
 /* Layout only; component looks live in components.css. */
 .header { display: grid; gap: var(--space-2); }
 .header__top { display: flex; align-items: center; gap: var(--space-2); }
-.header__top .seg { flex: 1 1 0; min-width: 0; } /* fixed width so tabs don't jump when the badge hides */
+.header__top .seg { flex: 1 1 0; min-width: 0; }
 .header__top .icon-btn { margin-left: auto; }
 
 .view { display: flex; flex-direction: column; gap: var(--space-3); flex: 1; min-height: 0; }
@@ -19,24 +19,23 @@
 .view-pomodoro[data-phase="short_break"] { --phase-color: var(--success); }
 .view-pomodoro[data-phase="long_break"] { --phase-color: var(--violet); }
 
+/* A label, not a control: no fill, just the phase colour above the ring. */
 .phase {
   align-self: stretch;
-  min-height: 32px;
+  min-height: 24px;
   display: grid;
   place-items: center;
-  border-radius: var(--radius-md);
-  background: var(--surface-2);
   color: var(--phase-color);
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
 }
 .controls { display: flex; gap: var(--space-2); justify-content: center; }
 .sessions { padding: 1px 8px; border-radius: var(--radius-pill); color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
-/* After saving new lengths the line that shows them flashes once. */
 #pomo-coded { margin-top: -8px; padding-top: 0; padding-bottom: 0; }
 .pdots { display: inline-flex; gap: 4px; margin-right: 6px; vertical-align: middle; }
 .pdot { width: 7px; height: 7px; box-sizing: border-box; border: 1.5px solid var(--muted); border-radius: 50%; }
 .pdot--on { border-color: var(--accent); background: var(--accent); }
+/* After saving new lengths the line that shows them flashes once. */
 .sessions.is-updated { animation: pomo-flash 1.6s ease-out; }
 @keyframes pomo-flash { from { background: color-mix(in srgb, var(--phase-color) 28%, transparent); color: var(--fg); } }
 

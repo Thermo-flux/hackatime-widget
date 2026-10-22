@@ -2,6 +2,7 @@ import { $, el } from "./lib/dom.js";
 import { THEMES } from "./themes/data.js";
 import * as mascot from "./mascot.js";
 import { fitTiles } from "./fit.js";
+import { invoke } from "./lib/tauri.js";
 
 const STORAGE_KEY = "hackatime-widget.theme";
 const TOKEN_NAMES = [...new Set(THEMES.flatMap((t) => Object.keys(t.tokens ?? {})))];
@@ -66,6 +67,12 @@ export function init() {
 
   $("theme-btn").addEventListener("click", () => setPicker($("theme-picker").hidden));
   $("picker-close").addEventListener("click", () => setPicker(false));
+  const quiet = $("quiet-mascot");
+  quiet.addEventListener("change", () => {
+    mascot.setQuiet(quiet.checked);
+    invoke("set_quiet_mascot", { quiet: quiet.checked }).catch(() => {}); // the switch still works this session
+  });
+  invoke("get_config").then((cfg) => { quiet.checked = Boolean(cfg.quiet_mascot); mascot.setQuiet(quiet.checked); }).catch(() => {});
   $("picker-grid").addEventListener("click", (e) => {
     const b = e.target.closest(".picker__item");
     if (b) apply(b.dataset.id);

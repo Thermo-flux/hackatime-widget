@@ -1,6 +1,7 @@
 // Behaviour test for the mascot mood engine against the running app (mock mode, --remote-debugging-port=$CDP_PORT).
 // Checks pokes (happy -> surprised -> dizzy), petting (love), Pomodoro cheer (proud vs excited), errors (grumpy then sad),
-// session start/end, streaks, greetings, dozing off / waking, the long-session line and no line repeated twice in a row.
+// session start/end, streaks, dozing off / waking and no line repeated twice in a row. The mascot speaks only on events:
+// switching theme, dozing, waking and a long session change the face but not the text.
 // Usage: node mood-react.mjs   (exit code 1 on failure)
 const pages = await (await fetch(`http://127.0.0.1:${process.env.CDP_PORT ?? 9222}/json`)).json();
 const ws = new WebSocket(pages.find((p) => p.type === "page").webSocketDebuggerUrl);
@@ -31,9 +32,7 @@ for (const theme of ["dog", "phosphor", "classic"]) {
   await reset();
   await ev(`th.apply(${JSON.stringify(theme)}, { remember: false }); return true;`);
   let s = await state();
-  const greet = ["morning", "afternoon", "evening", "night"];
-  const greetLines = (await Promise.all(greet.map((k) => linesOf(theme, k)))).flat();
-  check("greets on theme switch", greetLines.includes(s.say), s.say);
+  check("theme switch: no new line", s.say === "", s.say);
   await reset(); await sleep(50);
 
   // Pokes: 1 -> happy/wink, 3 -> surprised, 6 -> dizzy.
@@ -107,15 +106,15 @@ await ev("window.__realNow = window.__realNow ?? Date.now; return true;");
 await ev("m.signal('session', true); return true;");
 await ev("const real = window.__realNow; Date.now = () => real() + 61 * 60 * 1000; return true;");
 let s = await waitFor((st) => st.expr === "proud");
-check("long session: proud", s.expr === "proud" && (await linesOf("classic", "longSession")).includes(s.say), `${s.expr} "${s.say}"`);
+check("long session: proud, no line", s.expr === "proud" && s.say === "", `${s.expr} "${s.say}"`);
 await ev("m.signal('session', false); return true;");
 await reset();
 await ev("const real = window.__realNow; Date.now = () => real() + 2 * 60 * 60 * 1000; return true;");
 s = await waitFor((st) => st.expr === "sleepy");
-check("idle a long time: dozes off", s.expr === "sleepy" && (await linesOf("classic", "drowsy")).includes(s.say), `${s.expr} "${s.say}"`);
+check("idle a long time: dozes off, no line", s.expr === "sleepy" && s.say === "", `${s.expr} "${s.say}"`);
 await ev("document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true })); return true;");
 s = await state();
-check("input wakes it up", s.expr === "surprised" && (await linesOf("classic", "wake")).includes(s.say), `${s.expr} "${s.say}"`);
+check("input wakes it up, no line", s.expr === "surprised" && s.say === "", `${s.expr} "${s.say}"`);
 await ev("Date.now = window.__realNow; return true;");
 await reset();
 

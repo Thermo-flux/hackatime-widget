@@ -171,6 +171,12 @@ fn set_api_key(key: String) -> Result<()> {
     Ok(())
 }
 
+/// Remembers whether the mascot may talk.
+#[tauri::command]
+fn set_quiet_mascot(quiet: bool) -> Result<()> {
+    config::save_quiet_mascot(quiet)
+}
+
 /// Saves new timer lengths without touching the rest of the config, applies them, and returns the timer.
 #[tauri::command]
 fn set_pomodoro(timer: State<Timer>, lengths: PomodoroLengths) -> Result<Snapshot> {
@@ -254,6 +260,7 @@ pub fn run() {
             get_config,
             set_api_key,
             set_pomodoro,
+            set_quiet_mascot,
             quit,
             session_state,
             session_start,

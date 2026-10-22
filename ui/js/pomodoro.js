@@ -113,7 +113,8 @@ function render(s) {
     else refreshCoded();
   }
 
-  $("pomo-reset").disabled = mode === "idle" && !pendingLengths(s);
+  // Nothing to reset while idle: hide the button but keep its space, so the row doesn't jump.
+  $("pomo-reset").classList.toggle("is-reserved", mode === "idle" && !pendingLengths(s));
 
   signal("pomo", { running: s.running, phase: s.phase });
   if (s.finished === "focus" && round && round.elapsed_secs > 0) {
@@ -165,8 +166,6 @@ function paintSettings() {
     const [f, r] = chip.dataset.preset.split(",").map(Number);
     chip.setAttribute("aria-pressed", String(draft.focus_min === f && draft.short_break_min === r));
   }
-  const unchanged = same(draft, current());
-  $("pomo-save").disabled = unchanged;
   const note = $("pomo-settings-note");
   note.classList.remove("notice--error");
   note.textContent = modeOf(state) === "idle"

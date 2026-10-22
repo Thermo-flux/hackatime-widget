@@ -34,12 +34,14 @@
   color: var(--fg);
   font-size: var(--fs-xs);
   line-height: 1.3;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; /* one line, whatever the theme's font */
   transition: opacity 0.4s;
 }
-.mascot-say:empty, .mascot-say.is-faded { opacity: 0; }
+.mascot-say.is-faded { opacity: 0; }
+.mascot-say:empty, .mascot-say.is-gone { display: none; }
 .mascot-bar[data-has-sprite="false"] .mascot-btn { display: none; }
 .mascot-bar[data-has-sprite="false"] .mascot-say { display: none; }
-.mascot-bar[data-has-sprite="false"] #theme-btn { margin-left: auto; }
+#theme-btn { margin-left: auto; }
 
 /* ---- Theme picker (covers the card) ---- */
 .picker {
@@ -66,7 +68,7 @@
   background: var(--surface-2);
   color: var(--fg);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   cursor: pointer;
 }
 .picker__item:hover { border-color: var(--border); }
@@ -75,6 +77,8 @@
 .picker__preview canvas { width: 32px; height: 32px; image-rendering: pixelated; }
 .picker__name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.picker__quiet { display: flex; align-items: center; gap: var(--space-2); font-size: var(--fs-xs); color: var(--fg); cursor: pointer; }
+.picker__quiet input { accent-color: var(--accent); margin: 0; }
 .picker__grid { overflow-y: auto; scrollbar-width: none; }
 .picker__grid::-webkit-scrollbar { display: none; }
 .picker__preview { width: 34px; height: 34px; }
