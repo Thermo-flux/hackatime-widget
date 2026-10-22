@@ -2,7 +2,8 @@
 //! linking Tauri's UI code into unit-test binaries fails on Windows (no comctl32 v6 manifest).
 
 use crate::config::{self, ConfigView, PomodoroLengths};
-use crate::error::Result;
+use crate::error::{Error, Result};
+use crate::modes::{self, Mode};
 use crate::pomodoro::{Phase, Pomodoro, Snapshot};
 use crate::sessions::{self, SessionStore, Summary};
 use crate::stats::Stats;
@@ -15,11 +16,11 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt as _};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tauri_plugin_notification::NotificationExt;
-use tauri_plugin_window_state::{AppHandleExt as _, StateFlags};
+use tauri_plugin_window_state::{StateFlags, WindowExt as _};
 
 /// Held in Tauri state so the timer keeps running if the UI reloads.
 struct Timer {
@@ -246,21 +247,47 @@ fn set_pomodoro(timer: State<Timer>, lengths: PomodoroLengths) -> Result<Snapsho
 /// Whether the tray icon exists: without it there would be no way to bring a hidden widget back.
 struct HasTray(bool);
 
-/// The window-state file lives in the OS config folder, which test runs must not write to:
-/// `HACKATIME_WIDGET_NO_WINDOW_STATE=1` turns position memory off.
-fn remembers_position() -> bool {
+/// Window positions are remembered per mode in the config (`full_pos` / `compact_pos`, see `modes.rs`).
+/// The window-state plugin from Phase 6 is kept only as a read-only, one-time fallback: when the config
+/// has no full-mode position yet (first run after the upgrade), the position the plugin saved is
+/// restored once. The plugin no longer restores on its own (`skip_initial_state`) and no longer tracks the
+/// window (its filter rejects it), so it can never fight the per-mode positions.
+/// Its file lives in the OS config folder, which test runs must not touch:
+/// `HACKATIME_WIDGET_NO_WINDOW_STATE=1` leaves the plugin out entirely.
+fn uses_window_state_plugin() -> bool {
     std::env::var("HACKATIME_WIDGET_NO_WINDOW_STATE").map_or(true, |v| v != "1")
 }
 
-fn remember_position(app: &AppHandle) {
-    if remembers_position() {
-        let _ = app.save_window_state(StateFlags::POSITION);
+/// The current mode and a window position not yet written to the config. Dragging fires many `Moved`
+/// events; the newest one waits here and the 1 s background tick writes it (a throttled save).
+struct WindowPlace {
+    mode: Mutex<Mode>,
+    unsaved: Mutex<Option<(Mode, (i32, i32))>>,
+}
+
+impl WindowPlace {
+    fn moved(&self, pos: (i32, i32)) {
+        // Windows reports a minimised window at -32000; that is not a place to remember.
+        if pos.0 <= -32000 || pos.1 <= -32000 {
+            return;
+        }
+        let mode = *self.mode.lock().unwrap();
+        *self.unsaved.lock().unwrap() = Some((mode, pos));
+    }
+
+    /// Writes the pending position, if any. A failed write is only logged: positions are a convenience.
+    fn flush(&self) {
+        if let Some((mode, pos)) = self.unsaved.lock().unwrap().take() {
+            if let Err(e) = config::save_window(None, &[(mode, pos)]) {
+                eprintln!("window position not saved: {e}");
+            }
+        }
     }
 }
 
-/// Remembers where the widget is, then quits. (`exit` alone would skip the window-state save.)
+/// Saves where the widget is, then quits.
 fn quit_app(app: &AppHandle) {
-    remember_position(app);
+    app.state::<WindowPlace>().flush();
     app.exit(0);
 }
 
@@ -271,7 +298,7 @@ fn hide_window(app: AppHandle, tray: State<HasTray>) {
         return quit_app(&app);
     }
     if let Some(w) = app.get_webview_window("main") {
-        remember_position(&app);
+        app.state::<WindowPlace>().flush();
         let _ = w.hide();
     }
 }
@@ -279,7 +306,7 @@ fn hide_window(app: AppHandle, tray: State<HasTray>) {
 fn toggle_window(app: &AppHandle) {
     let Some(w) = app.get_webview_window("main") else { return };
     if w.is_visible().unwrap_or(false) {
-        remember_position(&app);
+        app.state::<WindowPlace>().flush();
         let _ = w.hide();
     } else {
         let _ = w.show();
@@ -287,27 +314,113 @@ fn toggle_window(app: &AppHandle) {
     }
 }
 
-/// Moves the widget back onto a monitor if its remembered position is on one that is gone.
-fn keep_on_screen(w: &tauri::WebviewWindow) {
-    let (Ok(pos), Ok(size), Ok(monitors)) = (w.outer_position(), w.outer_size(), w.available_monitors()) else { return };
-    let areas: Vec<placement::Rect> = monitors
-        .iter()
+/// The hotkey and the tray item: the page animates and then calls `set_mode`. A hidden widget is shown
+/// first, so the switch is never invisible.
+fn request_compact_toggle(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        if !w.is_visible().unwrap_or(true) {
+            let _ = w.show();
+        }
+    }
+    let _ = app.emit_to("main", "compact-hotkey", ());
+}
+
+fn monitors(w: &tauri::WebviewWindow) -> Vec<modes::Monitor> {
+    to_monitors(w.available_monitors().unwrap_or_default())
+}
+
+fn to_monitors(list: Vec<tauri::Monitor>) -> Vec<modes::Monitor> {
+    list.iter()
         .map(|m| {
             let a = m.work_area();
-            placement::Rect { x: a.position.x, y: a.position.y, w: a.size.width, h: a.size.height }
+            let work_area = placement::Rect { x: a.position.x, y: a.position.y, w: a.size.width, h: a.size.height };
+            modes::Monitor { work_area, scale: m.scale_factor() }
         })
-        .collect();
+        .collect()
+}
+
+/// Moves the widget back onto a monitor if its remembered position is on one that is gone.
+fn keep_on_screen(w: &tauri::WebviewWindow) {
+    let (Ok(pos), Ok(size)) = (w.outer_position(), w.outer_size()) else { return };
+    let areas: Vec<placement::Rect> = monitors(w).iter().map(|m| m.work_area).collect();
     let (x, y) = placement::clamp_into((pos.x, pos.y), (size.width, size.height), &areas);
     if (x, y) != (pos.x, pos.y) {
         let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
     }
 }
 
-fn build_tray(app: &tauri::App) -> tauri::Result<()> {
+/// What `set_mode` did, in logical pixels of the monitor the window is on. `shift_*` is how far clamping
+/// moved the window away from the pure top-right anchor; the expand animation starts the pill there.
+#[derive(Serialize)]
+struct ModeRect {
+    mode: Mode,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    scale: f64,
+    shift_x: f64,
+    shift_y: f64,
+}
+
+/// Switches the window between the full widget and the compact pill: size, position (top-right anchor,
+/// clamped into the monitor's work area) and persistence. All window work happens here, so the page needs
+/// no window size or position permissions. Animations are the page's business (`mode.js`).
+#[tauri::command]
+fn set_mode(app: AppHandle, place: State<WindowPlace>, mode: String) -> Result<ModeRect> {
+    let to = Mode::parse(&mode).ok_or_else(|| Error::Window(format!("unknown mode {mode:?}")))?;
+    let w = app.get_webview_window("main").ok_or_else(|| Error::Window("no main window".into()))?;
+    let fail = |e: tauri::Error| Error::Window(e.to_string());
+    let (pos, size) = (w.outer_position().map_err(fail)?, w.outer_size().map_err(fail)?);
+    let current = placement::Rect { x: pos.x, y: pos.y, w: size.width, h: size.height };
+    let p = modes::switch(to, current, &monitors(&w));
+
+    let from = std::mem::replace(&mut *place.mode.lock().unwrap(), to);
+    // Position first, then size: the page hides itself for this moment (see mode.js), so the in-between
+    // state is never seen whichever order the OS paints.
+    w.set_position(tauri::PhysicalPosition::new(p.pos.0, p.pos.1)).map_err(fail)?;
+    w.set_size(tauri::PhysicalSize::new(p.size.0, p.size.1)).map_err(fail)?;
+
+    let mut positions = vec![(to, p.pos)];
+    if from != to {
+        positions.push((from, (pos.x, pos.y)));
+    }
+    *place.unsaved.lock().unwrap() = None;
+    if let Err(e) = config::save_window(Some(to), &positions) {
+        eprintln!("window mode not saved: {e}");
+    }
+    let l = |v: i32| modes::to_logical(v as i64, p.scale);
+    Ok(ModeRect {
+        mode: to,
+        x: l(p.pos.0),
+        y: l(p.pos.1),
+        width: modes::to_logical(p.size.0 as i64, p.scale),
+        height: modes::to_logical(p.size.1 as i64, p.scale),
+        scale: p.scale,
+        shift_x: l(p.shift.0),
+        shift_y: l(p.shift.1),
+    })
+}
+
+/// Automated tests only (`HACKATIME_WIDGET_TEST_HOOKS=1`, refused otherwise): moves the window like a drag
+/// would (physical pixels), so the `Moved` -> config path can be checked without a real pointer.
+#[tauri::command]
+fn test_move_window(app: AppHandle, x: i32, y: i32) -> Result<()> {
+    if !std::env::var("HACKATIME_WIDGET_TEST_HOOKS").is_ok_and(|v| v == "1") {
+        return Err(Error::Window("test hooks are off".into()));
+    }
+    let w = app.get_webview_window("main").ok_or_else(|| Error::Window("no main window".into()))?;
+    w.set_position(tauri::PhysicalPosition::new(x, y)).map_err(|e| Error::Window(e.to_string()))
+}
+
+fn build_tray(app: &tauri::App, hotkey: &str) -> tauri::Result<()> {
     let handle = app.handle();
     let toggle = MenuItem::with_id(handle, "toggle", "Show / Hide", true, None::<&str>)?;
-    // Enabled together with compact mode (Phase 7).
-    let compact = MenuItem::with_id(handle, "compact", "Compact mode", false, None::<&str>)?;
+    // The accelerator only shows the hotkey beside the label: a tray menu is not attached to a window, so
+    // no accelerator table ever translates it, and the global shortcut (which fires the switch) swallows the
+    // keystroke anyway. A hotkey string the menu can't parse just leaves the label bare.
+    let compact = MenuItem::with_id(handle, "compact", "Compact mode", true, Some(hotkey))
+        .or_else(|_| MenuItem::with_id(handle, "compact", "Compact mode", true, None::<&str>))?;
     let theme_items: Vec<MenuItem<_>> = themes::THEMES
         .iter()
         .map(|(id, label)| MenuItem::with_id(handle, format!("theme:{id}"), *label, true, None::<&str>))
@@ -336,6 +449,7 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
                     let _ = autostart.set_checked(!want);
                 }
             }
+            "compact" => request_compact_toggle(app),
             "quit" => quit_app(app),
             id => {
                 if let Some(theme) = id.strip_prefix("theme:").filter(|t| themes::is_theme(t)) {
@@ -364,7 +478,7 @@ fn register_hotkey(app: &tauri::App, hotkey: &str) {
     };
     let registered = app.global_shortcut().on_shortcut(shortcut, |app, _, event| {
         if event.state == ShortcutState::Pressed {
-            let _ = app.emit_to("main", "compact-hotkey", ());
+            request_compact_toggle(app);
         }
     });
     if let Err(e) = registered {
@@ -420,9 +534,15 @@ pub fn run() {
     let saved_count = if cfg.mock { 0 } else { focus_day::load(&config::data_path("pomodoro-day.json"), today) };
 
     let mut builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
-    if remembers_position() {
-        // Size is the app's to decide (compact mode), so only the position is remembered.
-        builder = builder.plugin(tauri_plugin_window_state::Builder::new().with_state_flags(StateFlags::POSITION).build());
+    if uses_window_state_plugin() {
+        // Read-only legacy fallback, see `uses_window_state_plugin`.
+        builder = builder.plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(StateFlags::POSITION)
+                .skip_initial_state("main")
+                .with_filter(|_| false)
+                .build(),
+        );
     }
     builder
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
@@ -439,24 +559,56 @@ pub fn run() {
         .manage(Sessions(Mutex::new(store)))
         .manage(Heartbeats(Mutex::new(activity::HeartbeatCache::default())))
         .manage(FocusBeats(Mutex::new(activity::HeartbeatCache::default())))
+        .manage(WindowPlace { mode: Mutex::new(cfg.ui_mode), unsaved: Mutex::new(None) })
         .setup(move |app| {
             let _ = app.state::<Timer>().app.set(app.handle().clone());
             let handle = app.handle().clone();
             std::thread::spawn(move || loop {
                 std::thread::sleep(std::time::Duration::from_secs(1));
                 handle.state::<Timer>().tick();
+                handle.state::<WindowPlace>().flush();
             });
             // Keep WebView2/WebKit data beside the config instead of in the OS app-data dir.
             let data_dir = config::data_path("webview-data");
             let window_cfg = app.config().app.windows[0].clone();
             // HACKATIME_WIDGET_HIDDEN=1 keeps the window off-screen for automated UI tests.
             let hidden = std::env::var("HACKATIME_WIDGET_HIDDEN").is_ok_and(|v| v == "1");
-            let window = tauri::WebviewWindowBuilder::from_config(app.handle(), &window_cfg)?
+            // The window is created at its mode's size and remembered position. The builder takes logical
+            // values, so the remembered physical position is handed over at its monitor's scale; the exact
+            // physical position and size are then set again (a no-op unless the OS converted differently).
+            let mode = cfg.ui_mode;
+            let (lw, lh) = mode.logical_size();
+            let launch = modes::at_launch(mode, cfg.pos_for(mode), &to_monitors(app.available_monitors().unwrap_or_default()));
+            let mut window = tauri::WebviewWindowBuilder::from_config(app.handle(), &window_cfg)?
                 .data_directory(data_dir)
-                .visible(!hidden)
-                .build()?;
+                .inner_size(lw, lh)
+                .visible(!hidden);
+            if let Some(p) = launch {
+                window = window.position(modes::to_logical(p.pos.0 as i64, p.scale), modes::to_logical(p.pos.1 as i64, p.scale));
+            }
+            if let Some(script) = modes::init_script(mode) {
+                window = window.initialization_script(script);
+            }
+            let window = window.build()?;
+            match launch {
+                Some(p) => {
+                    let _ = window.set_position(tauri::PhysicalPosition::new(p.pos.0, p.pos.1));
+                    let _ = window.set_size(tauri::PhysicalSize::new(p.size.0, p.size.1));
+                }
+                // First run after Phase 7: the position the window-state plugin remembered, once.
+                None if mode == Mode::Full && uses_window_state_plugin() => {
+                    let _ = window.restore_state(StateFlags::POSITION);
+                }
+                None => {}
+            }
             keep_on_screen(&window);
-            let has_tray = match build_tray(app) {
+            let place = app.handle().clone();
+            window.on_window_event(move |e| {
+                if let WindowEvent::Moved(p) = e {
+                    place.state::<WindowPlace>().moved((p.x, p.y));
+                }
+            });
+            let has_tray = match build_tray(app, &cfg.compact_hotkey) {
                 Ok(()) => true,
                 Err(e) => {
                     eprintln!("tray icon unavailable, the x button will quit: {e}");
@@ -475,6 +627,8 @@ pub fn run() {
             set_pomodoro,
             set_quiet_mascot,
             hide_window,
+            set_mode,
+            test_move_window,
             session_state,
             recently_active,
             session_start,
