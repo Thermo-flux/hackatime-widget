@@ -27,7 +27,7 @@ the widget only reads them back.
 |---|---|
 | Windows | Unsigned builds trigger SmartScreen: *More info → Run anyway*. Needs the WebView2 runtime (preinstalled on Windows 11). |
 | macOS | Unsigned builds: right-click the app → *Open* the first time. |
-| Linux | Needs `webkit2gtk-4.1` (`sudo apt install libwebkit2gtk-4.1-0`). On Wayland, compositors may ignore *always on top* and window dragging; X11 works fully. |
+| Linux | Needs `webkit2gtk-4.1` (`sudo apt install libwebkit2gtk-4.1-0`). On Wayland, compositors may ignore *always on top* and window dragging; X11 works fully. On Wayland the global hotkey and window positioning (compact mode, remembered position) may not work either; use the tray icon's *Compact mode* item and click the pill to expand. |
 
 ## Where your data lives
 Next to the app if that folder is writable (portable use), otherwise in your user config folder

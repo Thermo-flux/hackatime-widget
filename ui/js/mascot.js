@@ -143,8 +143,19 @@ let goneTimer = null;
 /** Speaks a line. Only called for events (see SPEAKS and the reactions); the bubble collapses once it has faded. */
 function say(kind) {
   if (!theme?.sprite || (quiet && !PET.has(kind))) return;
+  show(nextLine(kind));
+}
+
+/** Says a one-off line that isn't part of any theme's repertoire (a tip). Silent when quiet. Returns whether it spoke. */
+export function tell(text) {
+  if (!theme?.sprite || quiet) return false;
+  show(text);
+  return true;
+}
+
+function show(text) {
   const bubble = $("mascot-say");
-  lastText = nextLine(kind);
+  lastText = text;
   bubble.textContent = lastText;
   bubble.classList.remove("is-faded", "is-gone");
   lastSaid = Date.now();
