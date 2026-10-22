@@ -541,7 +541,18 @@ pub fn run() {
     let today = Local::now().date_naive();
     let saved_count = if cfg.mock { 0 } else { focus_day::load(&config::data_path("pomodoro-day.json"), today) };
 
-    let mut builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
+    let mut builder = tauri::Builder::default();
+    // Starting the app again brings the running one back (it may be minimised to the tray). Test runs with their
+    // own config or in mock mode are exempt, so they can run beside a real widget.
+    if !cfg.mock && std::env::var_os("HACKATIME_WIDGET_CONFIG").is_none() {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }));
+    }
+    builder = builder.plugin(tauri_plugin_opener::init());
     if uses_window_state_plugin() {
         // Read-only legacy fallback, see `uses_window_state_plugin`.
         builder = builder.plugin(
