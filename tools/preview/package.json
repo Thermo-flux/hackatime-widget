@@ -1,0 +1,7 @@
+{
+  "name": "hackatime-widget-preview",
+  "private": true,
+  "type": "module",
+  "description": "Browser preview harness for the widget UI (dev tool only; the app itself has no npm build step).",
+  "devDependencies": { "playwright": "1.55.0" }
+}

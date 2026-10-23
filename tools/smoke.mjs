@@ -37,7 +37,7 @@ const text = (sel) => ev(`document.querySelector(${JSON.stringify(sel)})?.textCo
 log("== stats");
 await click("#tab-stats");
 log("total today:", await text("#total"), "| badge:", await ev("!document.getElementById('mock-badge').hidden"));
-for (const r of ["week", "month", "all", "today"]) {
+for (const r of ["7d", "30d", "all", "today"]) {
   const res = await click(`[data-range=${r}]`);
   log(`range ${r}:`, res, await text("#total"), "| pressed:", await ev(`document.querySelector('[data-range=${r}]').getAttribute('aria-pressed')`), "| langs:", await ev("document.querySelectorAll('#languages li').length"));
 }
@@ -55,12 +55,12 @@ log("== pomodoro (the ring is the start/pause button)");
 const ring = () => ev("(() => { const r = document.getElementById('pomo-toggle'); return r.dataset.state + ' | ' + document.getElementById('pomo-hint').textContent.trim() + ' | ' + r.getAttribute('aria-label'); })()");
 let fails = 0;
 const expect = (what, ok, got) => { if (!ok) fails++; log(`${ok ? "ok  " : "FAIL"} ${what}${got === undefined ? "" : ` -> ${got}`}`); };
-expect("idle: reset disabled", await ev("document.getElementById('pomo-reset').disabled"));
+expect("idle: reset hidden", await ev("document.getElementById('pomo-reset').classList.contains('is-reserved')"));
 expect("idle ring", /^idle \| Start \| Start Focus/.test(await ring()), await ring());
 log("start (mouse on ring):", await click("#pomo-toggle"));
 await sleep(2200);
 expect("running ring", /^running \| Pause/.test(await ring()), await ring());
-log("after 2s:", await text("#pomo-time"), "| title:", await ev("document.title"), "| reset disabled:", await ev("document.getElementById('pomo-reset').disabled"));
+log("after 2s:", await text("#pomo-time"), "| title:", await ev("document.title"), "| reset hidden:", await ev("document.getElementById('pomo-reset').classList.contains('is-reserved')"));
 await shot("2-pomodoro-running");
 await ev("document.getElementById('pomo-toggle').focus()");
 await key("Enter"); // keyboard: Enter on the focused ring pauses
@@ -74,7 +74,7 @@ log("pause again:", await click("#pomo-toggle"), await ring());
 log("skip:", await click("#pomo-skip"), "| phase:", await text("#pomo-phase"), await text("#pomo-time"), "| data-phase:", await ev("document.getElementById('panel-pomodoro').dataset.phase"));
 await shot("3-pomodoro-break");
 log("skip again:", await click("#pomo-skip"), "| phase:", await text("#pomo-phase"), "| sessions:", await text("#pomo-sessions"));
-expect("idle after skips: reset disabled", await ev("document.getElementById('pomo-reset').disabled"));
+expect("idle after skips: reset hidden", await ev("document.getElementById('pomo-reset').classList.contains('is-reserved')"));
 
 log("== pomodoro: set times");
 const val = (k) => ev(`document.querySelector('.stepper[data-key=${k}] [role=spinbutton]').getAttribute('aria-valuenow')`);
@@ -82,7 +82,7 @@ const btn = (k, dir) => `.stepper[data-key=${k}] .stepper__btn[data-dir="${dir}"
 log("open:", await click("#pomo-set"));
 expect("settings shown, ring hidden", await ev("!document.getElementById('pomo-settings').hidden && document.getElementById('pomo-toggle').hidden"));
 expect("focus on first value", (await ev("document.activeElement.getAttribute('aria-labelledby')")) === "pomo-l-focus");
-expect("save disabled until changed", await ev("document.getElementById('pomo-save').disabled"));
+expect("save always enabled", !(await ev("document.getElementById('pomo-save').disabled")));
 log("chip 50/10:", await click('[data-preset="50,10,30"]'));
 expect("preset applied", `${await val("focus_min")}/${await val("short_break_min")}/${await val("long_break_min")}` === "50/10/30");
 log("focus -:", await click(btn("focus_min", -1)));
@@ -140,6 +140,6 @@ log("== setup/error forms reachable");
 await click("#tab-stats");
 log("close button present:", await ev("!!document.getElementById('close')"));
 await shot("4-final");
-log("quit:", await click("#close"));
+log("hide:", await click("#minimise"));
 await sleep(800);
 ws.close();

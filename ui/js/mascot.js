@@ -15,13 +15,20 @@ export const DEFAULT_LINES = {
   focus: ["Focus mode. Shh.", "Deep work time.", "One thing at a time.", "Notifications? Never heard.", "Head down, ship it.", "I'll be quiet. Promise."],
   break: ["Break time. Stretch!", "Rest your eyes.", "Grab some water!", "Look out a window.", "Shoulders down. Breathe.", "Walk around a bit!"],
   streak: ["Look at that streak!", "Keep it going!", "Day after day!", "Streak on fire!", "Unstoppable!", "Don't break the chain!"],
+  empty: ["Nothing logged yet today.", "Blank slate. Let's start!", "Haven't seen code yet.", "Ready for the first commit?", "A fresh, empty day."],
+  no_key: ["Let's get you connected.", "I need your Hackatime key.", "Paste your key to begin.", "No key yet. Let's fix that.", "Connect me to Hackatime!"],
+  offline: ["Can't reach Hackatime.", "Offline. I'll keep trying.", "No signal. I'll retry.", "Network's down. Retrying.", "Waiting for the network."],
   error: ["Can't reach Hackatime...", "Hmm, something's off.", "Connection hiccup.", "No signal. Retrying...", "The server's napping?", "We'll be back."],
   // Reactions (short events)
+  connected: ["Connected!"],
   poke: ["Hehe!", "Boop!", "That tickles.", "Hi there!", "You rang?", "*wiggle*", "Oh, hello!", "Poke accepted."],
   pokeMore: ["Whoa, whoa!", "Okay, okay!", "Again?!", "So many pokes!", "Hey, I'm working!", "Easy there!"],
   dizzy: ["Everything's spinning...", "Too... many... pokes.", "Seeing stars!", "Whoa, dizzy...", "Which way is up?", "Need a sec..."],
   love: ["Aww, thanks!", "I like you too!", "Best human ever.", "So cozy.", "Pets accepted!", "<3"],
   cheer: ["Phase complete!", "Well done!", "Nailed it!", "Yay, you!", "That's a win!", "High five!"],
+  focusHigh: ["Locked in. Great focus!", "Barely looked away!", "That was deep work.", "Laser focus!"],
+  focusMid: ["Solid round.", "Decent focus.", "Good enough, nice.", "Round done."],
+  focusLow: ["Distracted? Next round.", "Mostly thinking, huh?", "Try a quieter round.", "Break time. Reset."],
   pomoDone: ["Focus round done!", "Pomodoro complete!", "Earned that break!", "Look at that focus!", "One more down!", "Proud of you!"],
   sessionStart: ["Ooh, we're coding!", "Session started!", "Let's gooo!", "Here we go!", "Clock's on!"],
   sessionEnd: ["Good session!", "Nice work today.", "Session wrapped!", "That was productive!", "Time well spent."],
@@ -39,11 +46,11 @@ export const DEFAULT_LINES = {
 export const LINE_KINDS = Object.keys(DEFAULT_LINES);
 
 /** Expression shown for each persistent mood. */
-const MOOD_EXPRESSION = { idle: "neutral", human: "happy", ai: "happy", session: "focus", focus: "focus", break: "sleepy", streak: "happy", error: "sad" };
+const MOOD_EXPRESSION = { idle: "neutral", human: "happy", ai: "happy", session: "focus", focus: "focus", break: "sleepy", streak: "happy", error: "sad", empty: "neutral", no_key: "neutral", offline: "sad" };
 /** Reactions: line kind -> [expression, how long to hold it (ms)]. */
 const REACTIONS = {
   poke: ["happy", 1200], pokeMore: ["surprised", 1400], dizzy: ["dizzy", 2800], love: ["love", 2600],
-  cheer: ["excited", 2500], pomoDone: ["proud", 3200], sessionStart: ["excited", 2200], sessionEnd: ["proud", 2600],
+  cheer: ["excited", 2500], connected: ["excited", 2800], pomoDone: ["proud", 3200], focusHigh: ["proud", 3200], focusMid: ["happy", 2800], focusLow: ["thinking", 3000], sessionStart: ["excited", 2200], sessionEnd: ["proud", 2600],
   longSession: ["proud", 3200], streak: ["excited", 3000], error: ["grumpy", 2600], loading: ["thinking", 1600],
   chatter: ["happy", 1600], drowsy: ["sleepy", 2000], wake: ["surprised", 1500],
   morning: ["happy", 2600], afternoon: ["happy", 2600], evening: ["wink", 2000], night: ["sleepy", 2600],
@@ -51,7 +58,7 @@ const REACTIONS = {
 /** Expressions whose eyes are plain enough to blink. */
 const CAN_BLINK = new Set(["neutral", "happy", "focus", "sad", "surprised", "thinking"]);
 /** Moods in which the mascot may doze off / fidget (not while focusing or on errors). */
-const CALM = new Set(["idle", "human", "ai", "streak"]);
+const CALM = new Set(["idle", "human", "ai", "streak", "empty"]);
 
 const DROWSY_AFTER = 10 * 60 * 1000; // no input for 10 minutes
 const LONG_SESSION = 60 * 60 * 1000;
@@ -72,8 +79,14 @@ let pomoPrev = null;
 let lastEnded = null; // the Pomodoro phase that ended most recently
 let sessionSince = 0;
 let longSessionSaid = false;
-let everLoaded = false;
-const signals = { error: false, pomo: null, session: false, ai: null, streak: 0 };
+let quiet = false; // quiet_mascot: expressions only, never a speech bubble
+
+/** Moods that come with a line when they begin: a Pomodoro phase change or something to fix. Others stay silent. */
+const SPEAKS = new Set(["focus", "break", "no_key", "offline"]);
+/** What a quiet mascot still says: the answer to being petted. */
+const PET = new Set(["poke", "pokeMore", "dizzy", "love", "wake"]);
+const BAD = new Set(["no_key", "offline", "error"]);
+const signals = { no_key: false, offline: false, error: false, pomo: null, session: false, ai: null, streak: 0, empty: false };
 
 /** Paint a sprite with an optional list of expression patches applied in order. */
 export function draw(canvas, t, ...patchNames) {
@@ -126,15 +139,42 @@ function nextLine(kind) {
 }
 
 let fadeTimer = null;
+let goneTimer = null;
+/** Speaks a line. Only called for events (see SPEAKS and the reactions); the bubble collapses once it has faded. */
 function say(kind) {
-  if (!theme?.sprite) return;
+  if (!theme?.sprite || (quiet && !PET.has(kind))) return;
+  show(nextLine(kind));
+}
+
+/** Says a one-off line that isn't part of any theme's repertoire (a tip). Silent when quiet. Returns whether it spoke. */
+export function tell(text) {
+  if (!theme?.sprite || quiet) return false;
+  show(text, true);
+  return true;
+}
+
+function show(text, tip = false) {
   const bubble = $("mascot-say");
-  lastText = nextLine(kind);
+  bubble.classList.toggle("is-tip", tip); // a tip may wrap onto a second line instead of being cut off
+  lastText = text;
   bubble.textContent = lastText;
-  bubble.classList.remove("is-faded");
+  bubble.classList.remove("is-faded", "is-gone");
   lastSaid = Date.now();
   clearTimeout(fadeTimer);
-  fadeTimer = setTimeout(() => bubble.classList.add("is-faded"), 9000);
+  clearTimeout(goneTimer);
+  fadeTimer = setTimeout(() => {
+    bubble.classList.add("is-faded");
+    goneTimer = setTimeout(() => bubble.classList.add("is-gone"), 450);
+  }, 9000);
+}
+
+/** quiet_mascot: the mascot keeps its faces but stops talking. */
+export function setQuiet(on) {
+  quiet = Boolean(on);
+  if (!quiet) return;
+  clearTimeout(fadeTimer);
+  clearTimeout(goneTimer);
+  $("mascot-say").classList.add("is-faded", "is-gone");
 }
 
 /** Show an expression for `ms`, optionally with a line of the given kind. */
@@ -162,33 +202,38 @@ export function express(expr, ms = 1500) {
 }
 
 function evaluate() {
-  const { error, pomo, session, ai, streak } = signals;
+  const { no_key, offline, error, pomo, session, ai, streak, empty } = signals;
   let next = "idle";
-  if (error) next = "error";
+  // Priority: no_key > offline > error > session/pomodoro > empty > what the data says > time of day.
+  if (no_key) next = "no_key";
+  else if (offline) next = "offline";
+  else if (error) next = "error";
   else if (pomo?.running) next = pomo.phase === "focus" ? "focus" : "break";
   else if (session) next = "session";
+  else if (empty) next = "empty";
   else if (ai !== null && ai > 50) next = "ai";
   else if (ai !== null) next = "human";
   else if (streak >= 3) next = "streak";
   if (next === mood) return;
+  const recovered = BAD.has(mood) && !BAD.has(next);
   mood = next;
   $("mascot-bar").dataset.mood = mood;
   if (mood === "error") { react("error"); return; } // grumpy first, then the sad mood face
   render();
-  say(mood);
+  if (recovered) react("connected");
+  else if (SPEAKS.has(mood)) say(mood);
 }
 
-/** Report something the mascot should react to: error, pomo, session, ai, streak. */
+/** Report something the mascot should react to: no_key, offline, error, empty, pomo, session, ai, streak. */
 export function signal(key, value) {
   const prev = signals[key];
   signals[key] = value;
-  if (key === "error" || key === "ai") everLoaded = true;
   evaluate();
   const now = Date.now();
   if (key === "session" && Boolean(value) !== Boolean(prev)) {
     if (value) { sessionSince = now; longSessionSaid = false; react("sessionStart"); }
     else { if (sessionSince) react("sessionEnd"); sessionSince = 0; }
-  } else if (key === "streak" && value >= 3 && value > (prev ?? 0) && mood !== "focus") {
+  } else if (key === "streak" && value >= 3 && value > (prev ?? 0) && !["focus", "empty", "no_key", "offline", "error"].includes(mood)) {
     react("streak");
   } else if (key === "pomo") {
     const was = pomoPrev?.phase, is = value?.phase;
@@ -202,20 +247,15 @@ export function cheer() {
   react(lastEnded === "focus" ? "pomoDone" : "cheer");
 }
 
-function greetingKind(hour = new Date().getHours()) {
-  if (hour >= 5 && hour < 12) return "morning";
-  if (hour >= 12 && hour < 18) return "afternoon";
-  if (hour >= 18 && hour < 23) return "evening";
-  return "night";
+/** A focus round just ended: react to how much of it was spent coding (percent, 0-100). */
+export function focusEnd(percent) {
+  react(percent >= 80 ? "focusHigh" : percent >= 40 ? "focusMid" : "focusLow");
 }
 
 export function setTheme(t) {
   theme = t;
   $("mascot-bar").dataset.hasSprite = String(Boolean(t.sprite));
   render();
-  if (!t.sprite) return;
-  if (mood === "idle") react(greetingKind()); // switching theme = meeting a new character
-  else say(mood);
 }
 
 export function currentMood() {
@@ -245,9 +285,7 @@ function fidget(now) {
   nextFidget = now + 25000 + Math.random() * 35000;
   if (override || drowsy || loading || !CALM.has(mood)) return;
   const r = Math.random();
-  const quiet = now - lastSaid > 90000 && $("mascot-say").classList.contains("is-faded");
-  if (quiet && r < 0.3) react("chatter");
-  else if (r < 0.55) hold("wink", null, 450);
+  if (r < 0.55) hold("wink", null, 450);
   else if (r < 0.8) hold("thinking", null, 1400);
   else hold("happy", null, 900);
 }
@@ -257,11 +295,10 @@ function tick() {
   if (!drowsy && !override && CALM.has(mood) && now - lastActive > DROWSY_AFTER) {
     drowsy = true;
     render();
-    say("drowsy");
   }
   if (sessionSince && !longSessionSaid && now - sessionSince > LONG_SESSION && !override) {
     longSessionSaid = true;
-    react("longSession");
+    hold("proud", null, 3200);
   }
   if (now >= nextFidget) fidget(now);
 }
@@ -281,7 +318,7 @@ export function init() {
   // Any input counts as activity and wakes a dozing mascot.
   const active = () => {
     lastActive = Date.now();
-    if (drowsy) { drowsy = false; react("wake"); }
+    if (drowsy) { drowsy = false; hold("surprised", null, 1500); }
   };
   for (const ev of ["pointerdown", "keydown", "wheel"]) document.addEventListener(ev, active, { passive: true });
   let lastMove = 0;
@@ -297,7 +334,6 @@ export function init() {
       if (busy) {
         busyTimer = setTimeout(() => {
           loading = true;
-          if (!everLoaded && !override) say("loading");
           render();
         }, 400);
       } else if (loading) {

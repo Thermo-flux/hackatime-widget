@@ -6,7 +6,7 @@ import { EXPRESSIONS, LINE_KINDS, DEFAULT_LINES } from "../ui/js/mascot.js";
 const REQUIRED = ["--bg", "--surface-2", "--fg", "--muted", "--border", "--accent", "--on-accent", "--human", "--ai", "--success", "--violet", "--warn", "--warn-bg", "--danger", "--focus", "--radius-sm", "--radius-md", "--radius-lg", "--shadow", "--font"];
 const MOODS = LINE_KINDS; // every speech-line kind the engine uses
 const PATCHES = ["blink", ...EXPRESSIONS.filter((e) => e !== "neutral")]; // every expression the engine can show
-const MAX_LINE = 30; // the speech bubble is ~130px wide and should stay within two lines
+const MAX_LINE = 28; // the speech bubble is ~130px wide and every line must fit on one line
 const errors = [], warnings = [];
 const err = (t, m) => errors.push(`${t}: ${m}`);
 const warn = (t, m) => warnings.push(`${t}: ${m}`);
@@ -28,6 +28,16 @@ function checkLines(id, lines) {
       if (typeof l !== "string" || !l.trim()) err(id, `lines.${kind} has an empty line`);
       else if (l.length > MAX_LINE) err(id, `lines.${kind} "${l}" is ${l.length} chars (max ${MAX_LINE})`);
     }
+  }
+}
+
+// A theme's effective lines (its own, else the fallback) must fit the one-line bubble. Monospace fonts are wider: ~21 chars.
+const MONO_MAX = 21;
+function checkEffective(t) {
+  if (!/mono|consolas|courier/i.test(t.tokens?.["--font"] ?? "")) return;
+  for (const k of LINE_KINDS) {
+    const pool = t.lines?.[k]?.length ? t.lines[k] : DEFAULT_LINES[k];
+    for (const l of pool) if (l.length > MONO_MAX) err(t.id, `${k} "${l}" is ${l.length} chars (monospace max ${MONO_MAX}); give the theme its own line`);
   }
 }
 
@@ -53,7 +63,7 @@ for (const t of THEMES) {
     if (T["--fg"] && T["--surface-2"] && contrast(T["--fg"], T["--surface-2"]) < 4.5) err(id, `fg on surface-2 ${contrast(T["--fg"], T["--surface-2"]).toFixed(2)} < 4.5`);
     if (T["--on-accent"] && T["--accent"] && contrast(T["--on-accent"], T["--accent"]) < 4.5) err(id, `on-accent on accent ${contrast(T["--on-accent"], T["--accent"]).toFixed(2)} < 4.5`);
     if (T["--muted"] && T["--bg"] && contrast(T["--muted"], T["--bg"]) < 4.5) err(id, `muted on bg ${contrast(T["--muted"], T["--bg"]).toFixed(2)} < 4.5`);
-    if (T["--muted"] && T["--surface-2"] && contrast(T["--muted"], T["--surface-2"]) < 4.5) warn(id, `muted on surface-2 ${contrast(T["--muted"], T["--surface-2"]).toFixed(2)} < 4.5`);
+    if (T["--muted"] && T["--surface-2"] && contrast(T["--muted"], T["--surface-2"]) < 4.5) err(id, `muted on surface-2 ${contrast(T["--muted"], T["--surface-2"]).toFixed(2)} < 4.5`);
     if (T["--human"] && T["--ai"]) {
       const normal = contrast(T["--human"], T["--ai"]), cb = contrast(deut(T["--human"]), deut(T["--ai"]));
       if (normal < 1.4) err(id, `human vs ai too similar (${normal.toFixed(2)})`);
@@ -91,8 +101,8 @@ for (const t of THEMES) {
     for (const name of PATCHES) { const l = look(name); if (seen.has(l)) err(id, `expression ${name} looks identical to ${seen.get(l)}`); else seen.set(l, name); }
     for (const m of Object.keys(t.lines ?? {})) if (!MOODS.includes(m)) err(id, `unknown mood in lines: ${m}`);
     checkLines(id, t.lines ?? {});
-    const missing = MOODS.filter((m) => !t.lines?.[m]?.length);
-    if (Object.keys(t.lines ?? {}).length && missing.length) warn(id, `no own lines for ${missing.join(", ")} (falls back to defaults)`);
+    checkEffective(t);
+    // A kind a theme doesn't override (e.g. empty, no_key, offline) falls back to DEFAULT_LINES; that is fine.
   } else if (id !== "classic") err(id, "missing sprite");
 }
 console.log(`${THEMES.length} themes checked`);

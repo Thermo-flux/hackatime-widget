@@ -6,6 +6,9 @@ import * as sessions from "./sessions.js";
 import * as mascot from "./mascot.js";
 import * as themes from "./themes.js";
 import { fitTiles } from "./fit.js";
+import * as compact from "./compact.js";
+import * as mode from "./mode.js";
+import * as pill from "./pill.js";
 
 const TABS = ["stats", "sessions", "pomodoro"];
 
@@ -37,7 +40,12 @@ function initTabs() {
   });
 }
 
+// The – minimises to the taskbar; the × quits. (The tray icon also hides and shows the widget.)
+$("minimise").addEventListener("click", () => invoke("minimise_window"));
 $("close").addEventListener("click", () => invoke("quit"));
+// Events from the tray menu (and, with Phase 7, the global hotkey).
+const listen = window.__TAURI__?.event?.listen;
+listen?.("set-theme", (e) => themes.apply(e.payload));
 // No browser context menu (Reload / Inspect) on a desktop widget.
 document.addEventListener("contextmenu", (e) => e.preventDefault());
 
@@ -48,10 +56,17 @@ stats.init();
 sessions.init();
 pomodoro.init();
 
+// Start in the mode the widget was left in (Rust already sized the window for it). An init script set
+// data-mode="compact" before the first paint when starting compact; this confirms it and starts the pill.
+pill.bind(() => mode.setMode("full"));
+invoke("get_config").then((cfg) => mode.init(cfg.ui_mode), () => mode.init(mode.getMode()));
+
 // Don't poll the backend while the window is hidden.
 document.addEventListener("visibilitychange", () => {
   const hidden = document.hidden;
   hidden ? stats.pause() : stats.resume();
   hidden ? sessions.pause() : sessions.resume();
   hidden ? pomodoro.pause() : pomodoro.resume();
+  if (hidden) compact.stop();
+  else if (mode.getMode() === "compact") compact.start(); // the pill's own timers
 });

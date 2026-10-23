@@ -11,21 +11,41 @@ let live = null; // { elapsed, at } so the clock can run locally between polls
 
 const pct = (n) => `${Math.round(n)}%`;
 
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "Tue 14 Oct" for a `YYYY-MM-DD` day, plus its weekday for the label under the bar. */
+function dayParts(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const wd = WEEKDAYS[new Date(y, m - 1, d).getDay()];
+  return { weekday: wd, text: `${wd} ${d} ${MONTHS[m - 1]}` };
+}
+
 function renderChart(daily) {
   const max = Math.max(1, ...daily.map((d) => d.secs));
+  $("sum-days").replaceChildren(
+    ...daily.map((d, i) => {
+      const label = el("span", { text: dayParts(d.date).weekday[0] });
+      label.classList.toggle("is-today", i === daily.length - 1);
+      return label;
+    }),
+  );
   $("sum-chart").replaceChildren(
     ...daily.map((d, i) => {
       const bar = el("span", { class: "chart__bar" });
       bar.classList.toggle("chart__bar--empty", d.secs === 0);
       bar.classList.toggle("chart__bar--today", i === daily.length - 1);
       bar.style.height = d.secs === 0 ? "" : `${Math.max(6, (d.secs / max) * 100)}%`;
-      bar.title = `${d.date}: ${d.secs ? short(d.secs) : "no session"}`;
+      bar.title = `${dayParts(d.date).text} \u00b7 ${d.secs ? short(d.secs) : "no session"}`;
       return bar;
     }),
   );
 }
 
 function renderSummary(s) {
+  const empty = s.total_sessions === 0;
+  $("sess-empty").hidden = !empty;
+  $("sess-stats").hidden = empty;
   $("sum-count").textContent = String(s.total_sessions);
   $("sum-total").textContent = short(s.total_secs);
   $("sum-avg").textContent = short(s.avg_secs);
@@ -45,18 +65,25 @@ function renderLive(a, summary) {
 
   const act = a.activity;
   if (!act) {
-    for (const id of ["live-human", "live-ai", "live-coding", "live-focus"]) $(id).textContent = "–";
+    for (const id of ["live-human", "live-ai", "live-idle", "live-focus"]) $(id).textContent = "–";
     $("live-bar-human").style.width = "0%";
     $("live-bar-ai").style.width = "0%";
+    $("live-bar").classList.add("stat-bar--unknown");
+    $("live-legend").hidden = true;
+    $("live-legend-unknown").hidden = false;
     $("live-bar").setAttribute("aria-label", "No coding activity available");
     $("live-note").textContent = a.activity_error ? `Coding activity unavailable: ${a.activity_error}` : "";
     return;
   }
+  $("live-bar").classList.remove("stat-bar--unknown");
+  $("live-legend").hidden = false;
+  $("live-legend-unknown").hidden = true;
   const ai = act.ai_percent;
   const human = act.active_secs > 0 ? 100 - ai : 0;
   $("live-human").textContent = short(act.human_secs);
   $("live-ai").textContent = short(act.ai_secs);
-  $("live-coding").textContent = short(act.active_secs);
+  // Time in the session with no editor activity: elapsed minus active, never negative.
+  $("live-idle").textContent = short(Math.max(0, a.elapsed_secs - act.active_secs));
   $("live-focus").textContent = pct(act.focus_percent);
   $("live-bar-human").style.width = `${human}%`;
   $("live-bar-ai").style.width = `${ai}%`;
@@ -66,6 +93,9 @@ function renderLive(a, summary) {
   );
   $("live-note").textContent = [act.top_project, act.top_language].filter(Boolean).join(" · ");
 }
+
+/** Seconds on the running session's clock, or null when none is running (read by the compact pill). */
+export const liveElapsed = () => (live ? live.elapsed + (performance.now() - live.at) / 1000 : null);
 
 function paintClock() {
   if (!live) return;

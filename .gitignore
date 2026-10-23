@@ -10,3 +10,9 @@ webview-data/
 # stray test screenshots
 /*.png
 !/app-icon.png
+
+__pycache__/
+*.pyc
+
+node_modules/
+out/

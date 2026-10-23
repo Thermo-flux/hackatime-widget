@@ -3,8 +3,6 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; connect-src 'self' ipc: http://ipc.localhost; script-src 'self'; style-src 'self'; img-src 'self' data:" />
   <title>Hackatime</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -21,42 +19,58 @@
           <button class="seg__btn" role="tab" id="tab-pomodoro" aria-controls="panel-pomodoro" aria-selected="false" tabindex="-1">Pomodoro</button>
         </div>
         <span class="badge badge--warn" id="mock-badge" title="Showing sample data" hidden>Demo</span>
+        <button class="icon-btn icon-btn--soft" id="minimise" type="button" aria-label="Minimise" title="Minimise (click its taskbar button to bring it back)">&minus;</button>
         <button class="icon-btn" id="close" type="button" aria-label="Quit Hackatime widget" title="Quit">&times;</button>
       </div>
     </header>
 
     <section class="view view-stats" id="panel-stats" role="tabpanel" aria-labelledby="tab-stats" aria-busy="true">
+      <div class="banner" id="stale-banner" role="status" hidden>
+        <span id="stale-text"></span>
+        <button class="link-btn" id="stale-retry" type="button">Retry</button>
+      </div>
       <div class="seg" role="group" aria-label="Time range" id="ranges">
         <button class="seg__btn" data-range="today" aria-pressed="true">Day</button>
-        <button class="seg__btn" data-range="week" aria-pressed="false">Week</button>
-        <button class="seg__btn" data-range="month" aria-pressed="false">Month</button>
+        <button class="seg__btn" data-range="7d" aria-pressed="false">7d</button>
+        <button class="seg__btn" data-range="30d" aria-pressed="false">30d</button>
         <button class="seg__btn" data-range="all" aria-pressed="false">All</button>
       </div>
 
       <div id="stats-ok" class="view" hidden>
-        <div class="total tabular" id="total">0h 0m</div>
+        <div class="total tabular" id="total">0m</div>
+        <p class="total-context" id="total-context" hidden></p>
         <div class="stat-bar" id="stat-bar" role="img" aria-label="No data">
           <span class="stat-bar__human" id="bar-human"></span>
           <span class="stat-bar__ai" id="bar-ai"></span>
         </div>
-        <div class="legend">
-          <span><i class="dot dot--human"></i>Human <strong id="human">0m</strong> · <span id="human-pct">0%</span></span>
-          <span><i class="dot dot--ai"></i>AI <strong id="ai">0m</strong> · <span id="ai-pct">0%</span></span>
+        <div class="legend" id="legend-split">
+          <span><i class="dot dot--human"></i>Human <strong id="human">0m</strong></span>
+          <span><i class="dot dot--ai"></i>AI <strong id="ai">0m</strong></span>
         </div>
+        <div class="legend legend--one" id="legend-unknown" hidden></div>
+        <p class="notice" id="zero-note" hidden>Nothing yet. Time shows up here as your editor reports to Hackatime.</p>
         <div class="langs">
-          <h2 class="section-title">Top languages</h2>
+          <div class="langs__head">
+            <div class="list-toggle section-title" role="group" aria-label="Show top">
+              <button class="list-toggle__btn" type="button" data-list="languages" aria-pressed="true">Languages</button>
+              <button class="list-toggle__btn" type="button" data-list="projects" aria-pressed="false">Projects</button>
+            </div>
+            <span class="updated" id="updated"></span>
+          </div>
           <ul id="languages"></ul>
         </div>
       </div>
 
-      <form id="stats-key" class="view" hidden>
-        <p class="notice" id="key-msg">Connect your Hackatime account to see your stats.</p>
+      <form id="stats-key" class="view" hidden novalidate>
+        <p class="notice" id="key-msg" role="status">Connect your Hackatime account to see your stats.</p>
+        <button class="btn" id="get-key" type="button">Get my key &#8599;</button>
         <div class="field">
           <label class="field__label" for="key">API key</label>
-          <input class="field__input" id="key" type="password" autocomplete="off" required />
+          <input class="field__input" id="key" type="password" autocomplete="off" spellcheck="false" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+          <p class="field__error" id="key-error" role="alert" hidden>That doesn't look like a Hackatime key</p>
         </div>
         <button class="btn btn--primary" id="save" type="submit">Connect</button>
-        <p class="hint">Your key is on the Hackatime setup page: <strong>hackatime.hackclub.com/my/wakatime_setup</strong>. If Hackatime is already set up in your editor, this widget finds the key by itself.</p>
+        <p class="hint" id="key-hint">Already set up Hackatime in your editor? The widget finds your key automatically.</p>
       </form>
 
       <div id="stats-error" class="view" hidden>
@@ -68,19 +82,23 @@
     <section class="view view-sessions" id="panel-sessions" role="tabpanel" aria-labelledby="tab-sessions" hidden>
       <div class="view" id="sess-idle">
         <button class="btn btn--primary btn--block" id="sess-start" type="button" disabled>Start session</button>
+        <p class="notice" id="sess-empty" hidden>Sessions are focused blocks you start and stop. Hackatime keeps tracking everything else.</p>
+        <div id="sess-stats">
         <div class="tiles">
           <div class="tile"><div class="tile__value tabular" id="sum-count">0</div><div class="tile__label">Sessions</div></div>
-          <div class="tile"><div class="tile__value tabular" id="sum-total">0h 0m</div><div class="tile__label">Total time</div></div>
+          <div class="tile"><div class="tile__value tabular" id="sum-total">0m</div><div class="tile__label">Total time</div></div>
           <div class="tile"><div class="tile__value tabular" id="sum-avg">0m</div><div class="tile__label">Avg length</div></div>
         </div>
         <div class="regular">
           <span><strong id="sum-streak">0</strong> day streak <span class="muted">· best <span id="sum-best">0</span></span></span>
-          <span title="Days with a session in the last 14"><strong id="sum-active">0</strong>/<span id="sum-window">14</span> active</span>
+          <span title="Days with a session in the last 14"><strong id="sum-active">0</strong> of <span id="sum-window">14</span> days</span>
         </div>
         <div class="chart" id="sum-chart" role="img" aria-label="Time per day, last 14 days"></div>
-        <div class="legend">
-          <span>Today <strong id="sum-today">0m</strong></span>
-          <span>Last 7 days <strong id="sum-week">0h 0m</strong></span>
+        <div class="chart-days" id="sum-days" aria-hidden="true"></div>
+        <div class="legend legend--rows">
+          <span>In sessions today <strong id="sum-today">0m</strong></span>
+          <span>In sessions, 7 days <strong id="sum-week">0m</strong></span>
+        </div>
         </div>
       </div>
 
@@ -91,14 +109,15 @@
           <span class="stat-bar__human" id="live-bar-human"></span>
           <span class="stat-bar__ai" id="live-bar-ai"></span>
         </div>
-        <div class="legend">
+        <div class="legend" id="live-legend">
           <span><i class="dot dot--human"></i>Human <strong id="live-human">–</strong></span>
           <span><i class="dot dot--ai"></i>AI <strong id="live-ai">–</strong></span>
         </div>
+        <div class="legend legend--one" id="live-legend-unknown" hidden>AI share unavailable</div>
         <div class="tiles">
-          <div class="tile"><div class="tile__value tabular" id="live-coding">–</div><div class="tile__label">Coding</div></div>
+          <div class="tile"><div class="tile__value tabular" id="live-idle">–</div><div class="tile__label">Idle</div></div>
           <div class="tile"><div class="tile__value tabular" id="live-focus">–</div><div class="tile__label">Focus</div></div>
-          <div class="tile"><div class="tile__value tabular" id="live-today">–</div><div class="tile__label">Today</div></div>
+          <div class="tile"><div class="tile__value tabular" id="live-today">–</div><div class="tile__label tile__label--wrap">Sessions today</div></div>
         </div>
         <p class="notice" id="live-note"></p>
         <button class="btn btn--danger btn--block" id="sess-stop" type="button">End session</button>
@@ -126,11 +145,12 @@
         </span>
       </button>
       <div class="controls" id="pomo-controls">
-        <button class="btn" id="pomo-reset" type="button" disabled>Reset</button>
+        <button class="btn btn--ghost" id="pomo-reset" type="button">Reset</button>
         <button class="btn btn--ghost" id="pomo-skip" type="button" title="Go to the next phase">Skip</button>
         <button class="btn btn--ghost" id="pomo-set" type="button" aria-expanded="false" aria-controls="pomo-settings" aria-describedby="pomo-lengths">Times</button>
       </div>
-      <p class="sessions" id="pomo-sessions"><span id="pomo-lengths">25 / 5 min</span> · <span id="pomo-count">0 done</span></p>
+      <p class="sessions" id="pomo-sessions"><span class="pdots" id="pomo-dots" aria-hidden="true"></span><span id="pomo-count">0 today</span><span class="sr-only" id="pomo-lengths">Focus 25 min, rest 5 min</span></p>
+      <p class="sessions" id="pomo-coded" hidden></p>
       <p class="sr-only" id="pomo-status" aria-live="polite"></p>
 
       <div class="pomo-settings" id="pomo-settings" role="group" aria-labelledby="pomo-settings-title" hidden>
@@ -171,18 +191,36 @@
         <canvas id="mascot" width="16" height="16" aria-hidden="true"></canvas>
       </button>
       <p class="mascot-say" id="mascot-say" aria-live="polite"></p>
-      <button class="btn btn--ghost" id="theme-btn" type="button" aria-haspopup="dialog" aria-expanded="false">Theme</button>
+      <button class="btn btn--ghost btn--icon" id="theme-btn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="Theme" title="Theme">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 0 0 0 18c1.4 0 2-.9 2-1.8 0-.9-.6-1.3-.6-2.2 0-1 .8-1.8 1.9-1.8H18a3 3 0 0 0 3-3C21 6.9 17 3 12 3z"/><circle cx="7.5" cy="11" r="1" fill="currentColor"/><circle cx="10.5" cy="7" r="1" fill="currentColor"/><circle cx="15.5" cy="7.5" r="1" fill="currentColor"/></svg>
+      </button>
     </footer>
 
     <section class="picker" id="theme-picker" role="dialog" aria-label="Choose a theme" hidden>
       <h2 class="section-title">Choose a theme</h2>
       <div class="picker__grid" id="picker-grid"></div>
+      <label class="picker__quiet"><input type="checkbox" id="quiet-mascot"> Quiet mascot (speaks only when petted)</label>
       <button class="btn btn--block" id="picker-close" type="button">Done</button>
     </section>
   </main>
   <i class="deco deco-a" aria-hidden="true"></i>
   <i class="deco deco-b" aria-hidden="true"></i>
   </div>
+  <!-- The compact pill: shown instead of .shell when html[data-mode="compact"]. Click or Enter expands. It sits
+       outside .shell (whose theme filters would re-anchor position: fixed), pinned to the window's top-right. -->
+  <button class="pill" id="pill" type="button" aria-label="Hackatime. Click to expand.">
+    <canvas class="pill__mascot" id="pill-mascot" width="16" height="16" aria-hidden="true"></canvas>
+    <span class="pill__main">
+      <i class="pill__dot" id="pill-dot" aria-hidden="true" hidden></i>
+      <span class="pill__time tabular" id="pill-time">0m</span>
+    </span>
+    <span class="pill__bar" id="pill-bar" aria-hidden="true">
+      <span class="pill__human" id="pill-human"></span>
+      <span class="pill__ai" id="pill-ai"></span>
+    </span>
+  </button>
+  <!-- The surface that travels between the card's box and the pill's box during the morph (mode.js). -->
+  <i class="morph" id="morph" aria-hidden="true"></i>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>
