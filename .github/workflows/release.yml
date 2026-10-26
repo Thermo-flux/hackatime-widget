@@ -38,10 +38,13 @@ jobs:
         with:
           workspaces: src-tauri
 
+      # The npm package ships a prebuilt CLI; `cargo install tauri-cli` compiled it from source on every run (minutes).
       - name: Install the Tauri CLI
-        run: cargo install tauri-cli --version "^2" --locked
+        run: npm install --global @tauri-apps/cli@2
 
+      # The tests are platform-independent, so one runner is enough; the others skip a whole extra compile.
       - name: Run tests
+        if: matrix.name == 'linux'
         working-directory: src-tauri
         run: cargo test --locked
 
@@ -49,9 +52,9 @@ jobs:
         shell: bash
         run: |
           if [ -n "${{ matrix.target }}" ]; then
-            cargo tauri build --target ${{ matrix.target }}
+            tauri build --target ${{ matrix.target }}
           else
-            cargo tauri build
+            tauri build
           fi
 
       # A no-install build: download, double-click. Settings are then kept next to the exe.
