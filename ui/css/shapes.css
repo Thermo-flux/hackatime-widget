@@ -15,7 +15,7 @@
    that don't fit wrap into a clipped second column (whole rows disappear instead of being cut in half). */
 .header__top .seg__btn { min-width: 0; }
 .view-pomodoro { container-type: size; }
-.ring { width: clamp(108px, calc(100cqh - 122px), 150px); height: clamp(108px, calc(100cqh - 122px), 150px); flex: none; }
+.ring { width: clamp(108px, calc(100cqh - 122px), 140px); height: clamp(108px, calc(100cqh - 122px), 140px); flex: none; }
 .ring__time { font-size: clamp(24px, calc((100cqh - 122px) * 0.213), 32px); }
 .langs { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 #languages { flex: 1; min-height: 0; display: flex; flex-flow: column wrap; align-content: flex-start; overflow: hidden; }
