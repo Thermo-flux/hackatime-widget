@@ -11,10 +11,10 @@ import { invoke } from "./lib/tauri.js";
 import * as compact from "./compact.js";
 import * as hint from "./hint.js";
 
-export const MORPH_MS = 220;
-export const FADE_MS = 120; // full content out during the first 120 ms, pill content in during the last 120 ms
-const SURFACE_FADE_MS = 90; // the plain morph surface fades in under the fading silhouette (and out on expand)
-export const EASE = "cubic-bezier(.2,.8,.2,1)";
+export const MORPH_MS = 380;
+export const FADE_MS = 200; // full content out during the first 200 ms, pill content in during the last 200 ms
+const SURFACE_FADE_MS = 140; // the plain morph surface fades in under the fading silhouette (and out on expand)
+export const EASE = "cubic-bezier(.32,.72,.24,1)";
 // Must match compact.css (--pill-w / --pill-h / --pill-margin / --pill-radius) and modes.rs (COMPACT_SIZE).
 const PILL = { w: 220, h: 40, margin: 10, radius: 20 };
 

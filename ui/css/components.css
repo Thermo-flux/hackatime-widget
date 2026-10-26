@@ -170,7 +170,7 @@
    data-state on the button: idle (not started) | running | paused. The pill under the time says what a click does. */
 .ring {
   --ring-c: var(--phase-color, var(--accent));
-  position: relative; width: 150px; height: 150px; margin: 0 auto; padding: 0;
+  position: relative; width: 140px; height: 140px; margin: 0 auto; padding: 0;
   border: 0; border-radius: 50%; background: none; color: inherit; font: inherit; cursor: pointer;
   transition: transform 0.15s ease;
   -webkit-tap-highlight-color: transparent;

@@ -15,7 +15,7 @@
 .view[aria-busy="true"] .langs { opacity: 0.5; }
 
 /* Pomodoro: phase label sits where the range tabs sit on the stats view. */
-.view-pomodoro { align-items: center; gap: 6px; }
+.view-pomodoro { align-items: center; justify-content: center; gap: var(--space-3); }
 .view-pomodoro[data-phase="focus"] { --phase-color: var(--accent); }
 .view-pomodoro[data-phase="short_break"] { --phase-color: var(--success); }
 .view-pomodoro[data-phase="long_break"] { --phase-color: var(--violet); }
@@ -23,16 +23,21 @@
 /* A label, not a control: no fill, just the phase colour above the ring. */
 .phase {
   align-self: stretch;
-  min-height: 24px;
+  min-height: 20px;
   display: grid;
   place-items: center;
   color: var(--phase-color);
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
 }
-.controls { display: flex; gap: var(--space-2); justify-content: center; }
-.sessions { padding: 1px 8px; border-radius: var(--radius-pill); color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
-#pomo-coded { margin-top: -8px; padding-top: 0; padding-bottom: 0; }
+/* Reset | Skip | Times: one narrow row, hairline dividers between the actions. */
+.controls { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; width: min(100%, 220px); }
+.controls .btn { min-height: 30px; padding: 0 var(--space-2); border-radius: 0; color: var(--fg); font-size: var(--fs-xs); font-weight: var(--fw-semibold); }
+.controls .btn + .btn { border-left: 1px solid var(--border); }
+.controls .btn.is-reserved { display: none; } /* Reset appears once there is something to reset */
+.controls .btn:first-child, .controls .btn.is-reserved + .btn { border-left-color: transparent; }
+.sessions { padding: 1px var(--space-2); border-radius: var(--radius-pill); color: color-mix(in srgb, var(--fg) 72%, var(--bg)); font-size: var(--fs-xs); white-space: nowrap; }
+#pomo-coded { margin-top: calc(var(--space-1) - var(--space-3)); padding-top: 0; padding-bottom: 0; }
 .pdots { display: inline-flex; gap: 4px; margin-right: 6px; vertical-align: middle; }
 .pdot { width: 7px; height: 7px; box-sizing: border-box; border: 1.5px solid var(--muted); border-radius: 50%; }
 .pdot--on { border-color: var(--accent); background: var(--accent); }
@@ -92,3 +97,6 @@
 .header__top .seg__btn { flex: 1 1 auto; padding: 0 5px; font-size: 13px; }
 .view-sessions { justify-content: flex-start; }
 .view-sessions .notice { margin: 0; }
+/* The primary action sits at the foot of the tab, the same place End session does. */
+#sess-idle > .btn--block, #sess-stop { margin-top: auto; }
+#sess-empty:not([hidden]) { flex: 1; display: grid; place-content: center; padding-inline: var(--space-3); text-align: center; }
